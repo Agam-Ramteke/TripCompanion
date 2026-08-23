@@ -1,0 +1,33 @@
+# Build outputs
+build/
+app/build/
+.gradle/
+.kotlin/
+*.apk
+*.aab
+captures/
+node_modules/
+dist/
+.vite/
+
+# Local machine configuration. Holds the train API key, which is never committed —
+# see docs/ for how BuildConfig picks it up.
+local.properties
+
+# IDE
+.idea/
+.vscode/
+.claude/
+*.iml
+.DS_Store
+
+# Real e-tickets. These are the author's own bookings and carry passenger names,
+# ages, PNRs and a home address. The unit tests run against redacted copies in
+# app/src/test/resources/tickets/ instead; the originals stay out of history.
+docs/Trip/*.pdf
+
+# Scratch: throwaway scripts and dumps used while reverse-engineering a PDF.
+tmp_pdf/
+
+# Device screenshots taken during manual walkthroughs.
+device-shots/

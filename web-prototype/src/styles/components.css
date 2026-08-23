@@ -1,0 +1,754 @@
+/* =============================================================================
+   Components — built only from tokens, so both themes share every screen.
+============================================================================= */
+
+.app {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  color: var(--text);
+  font-size: var(--step-1);
+  overflow: hidden;
+  position: relative;
+}
+
+/* Every frame in the back stack stays mounted; only the top one is shown, so a
+   draft below it keeps its state. */
+.app__frame {
+  position: absolute;
+  inset: 0;
+  background: var(--bg);
+}
+
+.app__frame[data-top='false'] {
+  display: none;
+}
+
+/* ── Typographic primitives ─────────────────────────────────────────────── */
+
+.eyebrow {
+  font-family: var(--eyebrow-family);
+  font-weight: var(--eyebrow-weight);
+  font-size: var(--eyebrow-size);
+  letter-spacing: var(--eyebrow-tracking);
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin: 0;
+  line-height: 1.4;
+}
+
+.eyebrow--accent {
+  color: var(--accent);
+}
+
+[data-theme='brutalist'] .eyebrow--accent {
+  color: var(--text);
+  background: var(--accent);
+  padding: 2px 6px;
+  display: inline-block;
+}
+
+.title {
+  font-family: var(--title-family);
+  font-weight: var(--title-weight);
+  letter-spacing: var(--title-tracking);
+  text-transform: var(--title-transform);
+  color: var(--text);
+  margin: 0;
+  line-height: 1.15;
+}
+
+.title--lg {
+  font-size: var(--step-4);
+}
+.title--md {
+  font-size: var(--step-3);
+}
+.title--sm {
+  font-size: var(--step-2);
+}
+
+.body-text {
+  font-size: var(--step-1);
+  line-height: 1.55;
+  color: var(--text);
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.body-text--dim {
+  color: var(--text-dim);
+}
+
+.clock {
+  font-family: var(--font-clock);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+.display-num {
+  font-family: var(--display-family);
+  font-weight: var(--display-weight);
+  letter-spacing: var(--display-tracking);
+  font-variant-numeric: tabular-nums;
+  line-height: 0.92;
+  margin: 0;
+}
+
+/* ── Screen shell ───────────────────────────────────────────────────────── */
+
+.screen {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.screen__bar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-4) var(--screen-pad) var(--sp-3);
+  flex: 0 0 auto;
+  background: var(--bg);
+}
+
+.screen__bar--bordered {
+  border-bottom: var(--divider);
+}
+
+.screen__bar-title {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--eyebrow-family);
+  font-weight: var(--eyebrow-weight);
+  font-size: var(--eyebrow-size);
+  letter-spacing: var(--eyebrow-tracking);
+  text-transform: uppercase;
+  color: var(--text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.screen__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 0 var(--screen-pad) var(--sp-7);
+  scrollbar-width: thin;
+}
+
+.screen__body--flush {
+  padding: 0;
+}
+
+/* For a screen whose body is a single edge-to-edge surface (the map): the body
+   stops scrolling and becomes the flex parent its child fills. */
+.screen__body--fill {
+  padding: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.screen__footer {
+  flex: 0 0 auto;
+  padding: var(--sp-3) var(--screen-pad) var(--sp-4);
+  border-top: var(--divider);
+  background: var(--bg);
+  display: flex;
+  gap: var(--sp-2);
+}
+
+/* ── Icon button ────────────────────────────────────────────────────────── */
+
+.icon-btn {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  color: var(--text);
+  border: var(--chip-border);
+  border-radius: var(--chip-radius);
+  background: transparent;
+  transition: background 0.15s var(--ease);
+}
+
+.icon-btn:hover {
+  background: var(--surface-3);
+}
+
+[data-theme='brutalist'] .icon-btn:hover {
+  background: var(--accent);
+}
+
+.icon-btn--bare {
+  border-color: transparent;
+}
+
+/* ── Buttons ────────────────────────────────────────────────────────────── */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-2);
+  min-height: 46px;
+  padding: 0 var(--sp-4);
+  border-radius: var(--btn-radius);
+  border: var(--control-border);
+  background: transparent;
+  color: var(--text);
+  font-family: var(--font-body);
+  font-weight: var(--btn-weight);
+  font-size: var(--step-1);
+  letter-spacing: var(--btn-tracking);
+  text-transform: uppercase;
+  transition:
+    transform 0.1s var(--ease),
+    background 0.15s var(--ease);
+}
+
+.btn--block {
+  width: 100%;
+}
+
+.btn--grow {
+  flex: 1;
+}
+
+.btn--primary {
+  background: var(--text);
+  color: var(--bg);
+  border-color: var(--text);
+  box-shadow: var(--btn-shadow);
+}
+
+[data-theme='brutalist'] .btn--primary {
+  background: var(--accent);
+  color: var(--accent-ink);
+  border-color: var(--line);
+}
+
+.btn--accent {
+  background: var(--accent);
+  color: var(--accent-ink);
+  border-color: var(--accent);
+  box-shadow: var(--btn-shadow);
+}
+
+[data-theme='brutalist'] .btn--accent {
+  border-color: var(--line);
+}
+
+.btn--quiet {
+  border-color: var(--line);
+  color: var(--text-dim);
+  box-shadow: none;
+}
+
+.btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+[data-theme='brutalist'] .btn--primary:active:not(:disabled),
+[data-theme='brutalist'] .btn--accent:active:not(:disabled) {
+  transform: translate(3px, 3px);
+  box-shadow: 1px 1px 0 var(--line);
+}
+
+.btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.btn--sm {
+  min-height: 36px;
+  font-size: var(--step-0);
+  padding: 0 var(--sp-3);
+}
+
+/* ── Card ───────────────────────────────────────────────────────────────── */
+
+.card {
+  background: var(--card-bg);
+  border: var(--card-border);
+  border-radius: var(--card-radius);
+  box-shadow: var(--card-shadow);
+  padding: var(--card-pad);
+  width: 100%;
+  text-align: left;
+  color: var(--text);
+  display: block;
+  transition: transform 0.12s var(--ease);
+}
+
+.card--tappable:hover {
+  border-color: var(--line-strong);
+}
+
+[data-theme='brutalist'] .card--tappable:active {
+  transform: translate(3px, 3px);
+  box-shadow: 2px 2px 0 var(--line);
+}
+
+.card--accent {
+  background: var(--accent-soft);
+}
+
+[data-theme='nothing'] .card--accent {
+  border-color: var(--accent);
+}
+
+[data-theme='brutalist'] .card--accent {
+  background: var(--accent);
+}
+
+.card--flat {
+  box-shadow: none;
+  background: var(--surface-3);
+}
+
+/* ── Section ────────────────────────────────────────────────────────────── */
+
+.section {
+  margin-top: var(--sp-6);
+}
+
+.section__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-3);
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+.stack--tight {
+  gap: var(--sp-2);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.row--between {
+  justify-content: space-between;
+}
+
+.spacer {
+  flex: 1;
+}
+
+.divider-line {
+  height: 0;
+  border-top: var(--divider);
+  margin: var(--sp-4) 0;
+}
+
+/* ── Status ─────────────────────────────────────────────────────────────── */
+/* Nothing carries status with form (filled / hollow / struck / hatched) and
+   keeps red for "now". Brutalist carries it with flat fills. */
+
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-family: var(--eyebrow-family);
+  font-weight: var(--eyebrow-weight);
+  font-size: var(--eyebrow-size);
+  letter-spacing: var(--eyebrow-tracking);
+  text-transform: uppercase;
+  padding: 4px 10px 4px 8px;
+  border-radius: var(--chip-radius);
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+
+.status__mark {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  flex: 0 0 auto;
+}
+
+[data-theme='brutalist'] .status {
+  border: 2px solid var(--line);
+  padding: 3px 8px;
+}
+
+[data-theme='brutalist'] .status__mark {
+  border-radius: 0;
+}
+
+/* ACTIVE — the only saturated state in the Nothing theme */
+.status--ACTIVE {
+  color: var(--st-active);
+  border-color: var(--st-active);
+}
+.status--ACTIVE .status__mark {
+  background: var(--st-active);
+}
+[data-theme='brutalist'] .status--ACTIVE {
+  background: var(--st-active);
+  color: var(--accent-ink);
+  border-color: var(--line);
+}
+[data-theme='brutalist'] .status--ACTIVE .status__mark {
+  background: var(--line);
+}
+
+/* STARTING_SOON — hollow ring, slow pulse */
+.status--STARTING_SOON {
+  color: var(--st-soon);
+  border-color: var(--line-strong);
+}
+.status--STARTING_SOON .status__mark {
+  background: transparent;
+  border: 2px solid var(--st-soon);
+  animation: pulse-soon 2.4s var(--ease) infinite;
+}
+[data-theme='brutalist'] .status--STARTING_SOON {
+  background: var(--surface);
+  color: var(--text);
+}
+[data-theme='brutalist'] .status--STARTING_SOON .status__mark {
+  border-color: var(--line);
+  background: var(--accent);
+  animation: none;
+}
+
+@keyframes pulse-soon {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.25;
+  }
+}
+
+/* UPCOMING */
+.status--UPCOMING {
+  color: var(--st-upcoming);
+  border-color: var(--line);
+}
+.status--UPCOMING .status__mark {
+  background: var(--st-upcoming);
+  opacity: 0.6;
+}
+[data-theme='brutalist'] .status--UPCOMING {
+  background: var(--surface);
+  color: var(--text-dim);
+}
+[data-theme='brutalist'] .status--UPCOMING .status__mark {
+  background: var(--surface);
+  border: 2px solid var(--line);
+}
+
+/* COMPLETED — a struck mark, definitively behind us */
+.status--COMPLETED {
+  color: var(--st-completed);
+  border-color: var(--line);
+}
+.status--COMPLETED .status__mark {
+  background: var(--st-completed);
+  position: relative;
+}
+[data-theme='brutalist'] .status--COMPLETED {
+  background: var(--st-completed);
+  color: #fff;
+}
+[data-theme='brutalist'] .status--COMPLETED .status__mark {
+  background: var(--accent);
+}
+
+/* SKIPPED — dotted, deliberately left out */
+.status--SKIPPED {
+  color: var(--st-skipped);
+  border-color: var(--line);
+}
+.status--SKIPPED .status__mark {
+  background: transparent;
+  border: 1px dashed var(--st-skipped);
+}
+[data-theme='brutalist'] .status--SKIPPED {
+  background: var(--st-skipped);
+  color: var(--text);
+}
+[data-theme='brutalist'] .status--SKIPPED .status__mark {
+  background: transparent;
+  border: 2px dashed var(--line);
+}
+
+/* MISSED — hatched in mono, the one clash colour in brutalist */
+.status--MISSED {
+  color: var(--st-missed);
+  border-color: var(--line-strong);
+}
+.status--MISSED .status__mark {
+  background: repeating-linear-gradient(
+    45deg,
+    var(--st-missed) 0 2px,
+    transparent 2px 4px
+  );
+}
+[data-theme='brutalist'] .status--MISSED {
+  background: var(--st-missed);
+  color: #fff;
+  border-color: var(--line);
+}
+[data-theme='brutalist'] .status--MISSED .status__mark {
+  background: var(--line);
+}
+
+/* Type chip — the event's kind, always secondary to status */
+.type-chip {
+  font-family: var(--eyebrow-family);
+  font-weight: var(--eyebrow-weight);
+  font-size: var(--eyebrow-size);
+  letter-spacing: var(--eyebrow-tracking);
+  text-transform: uppercase;
+  color: var(--text-dim);
+  padding: 4px 8px;
+  border: var(--chip-border);
+  border-radius: var(--chip-radius);
+  white-space: nowrap;
+}
+
+/* Struck title for terminal events, so the Timeline reads at a glance */
+.is-struck {
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+  color: var(--text-faint);
+}
+
+[data-theme='brutalist'] .is-struck {
+  text-decoration-thickness: 3px;
+  color: var(--text-dim);
+}
+
+/* ── Form controls ──────────────────────────────────────────────────────── */
+
+.field {
+  display: block;
+}
+
+.field__label {
+  display: block;
+  font-family: var(--eyebrow-family);
+  font-weight: var(--eyebrow-weight);
+  font-size: var(--eyebrow-size);
+  letter-spacing: var(--eyebrow-tracking);
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin-bottom: var(--sp-2);
+}
+
+.field__control {
+  width: 100%;
+  min-height: 48px;
+  padding: var(--sp-3);
+  background: var(--surface-2);
+  border: var(--control-border);
+  border-radius: var(--control-radius);
+  color: var(--text);
+  font-weight: var(--control-weight);
+  font-size: var(--step-1);
+}
+
+[data-theme='brutalist'] .field__control {
+  background: var(--surface);
+}
+
+.field__control--clock {
+  font-family: var(--font-clock);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+.field__control--area {
+  min-height: 120px;
+  resize: vertical;
+  line-height: 1.55;
+  font-family: var(--font-body);
+}
+
+.field__hint {
+  margin: var(--sp-2) 0 0;
+  font-size: var(--step-0);
+  color: var(--text-faint);
+}
+
+.field__error {
+  margin: var(--sp-2) 0 0;
+  font-size: var(--step-0);
+  color: var(--st-missed);
+  font-weight: 600;
+}
+
+.field-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--sp-3);
+}
+
+/* Segmented control — event type picker */
+.segmented {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}
+
+.segmented__opt {
+  flex: 1 1 auto;
+  min-width: 72px;
+  min-height: 42px;
+  padding: 0 var(--sp-2);
+  border: var(--control-border);
+  border-radius: var(--control-radius);
+  background: transparent;
+  color: var(--text-dim);
+  font-family: var(--eyebrow-family);
+  font-weight: var(--eyebrow-weight);
+  font-size: var(--eyebrow-size);
+  letter-spacing: var(--eyebrow-tracking);
+  text-transform: uppercase;
+}
+
+.segmented__opt[aria-pressed='true'] {
+  background: var(--text);
+  color: var(--bg);
+  border-color: var(--text);
+}
+
+[data-theme='brutalist'] .segmented__opt[aria-pressed='true'] {
+  background: var(--accent);
+  color: var(--accent-ink);
+  border-color: var(--line);
+  box-shadow: 3px 3px 0 var(--line);
+}
+
+/* Radio list — Settings theme picker */
+.radio-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  width: 100%;
+  padding: var(--sp-4);
+  text-align: left;
+  background: var(--card-bg);
+  border: var(--card-border);
+  border-radius: var(--card-radius);
+  box-shadow: var(--card-shadow);
+  color: var(--text);
+}
+
+.radio-row__dot {
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  border: 2px solid var(--line-strong);
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+}
+
+[data-theme='brutalist'] .radio-row__dot {
+  border-radius: 0;
+  border-color: var(--line);
+}
+
+.radio-row__dot::after {
+  content: '';
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: transparent;
+}
+
+[data-theme='brutalist'] .radio-row__dot::after {
+  border-radius: 0;
+}
+
+.radio-row[aria-checked='true'] .radio-row__dot {
+  border-color: var(--accent);
+}
+
+.radio-row[aria-checked='true'] .radio-row__dot::after {
+  background: var(--accent);
+}
+
+[data-theme='brutalist'] .radio-row[aria-checked='true'] .radio-row__dot {
+  border-color: var(--line);
+  background: var(--accent);
+}
+
+[data-theme='brutalist'] .radio-row[aria-checked='true'] .radio-row__dot::after {
+  background: var(--line);
+}
+
+/* ── Empty state ────────────────────────────────────────────────────────── */
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-3);
+  text-align: center;
+  padding: var(--sp-7) var(--sp-4);
+  min-height: 60%;
+}
+
+.empty__mark {
+  width: 56px;
+  height: 56px;
+  border-radius: var(--chip-radius);
+  border: var(--chip-border);
+  display: grid;
+  place-items: center;
+  color: var(--text-faint);
+  margin-bottom: var(--sp-2);
+}
+
+/* ── Floating action ────────────────────────────────────────────────────── */
+
+.fab {
+  position: absolute;
+  right: var(--screen-pad);
+  bottom: var(--sp-5);
+  width: 56px;
+  height: 56px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--btn-radius);
+  background: var(--text);
+  color: var(--bg);
+  border: var(--control-border);
+  border-color: var(--text);
+  box-shadow: var(--btn-shadow);
+  z-index: 5;
+}
+
+[data-theme='brutalist'] .fab {
+  background: var(--accent);
+  color: var(--accent-ink);
+  border-color: var(--line);
+}
+
+[data-theme='brutalist'] .fab:active {
+  transform: translate(3px, 3px);
+  box-shadow: 1px 1px 0 var(--line);
+}

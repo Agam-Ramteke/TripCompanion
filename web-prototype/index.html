@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Trip Companion — Visual Prototype</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <!--
+      Archivo  — shared body/UI grotesque (variable weight)
+      Martian Mono — all clock times & numeric data, in BOTH themes (tabular alignment)
+      Syne     — Neo-Brutalist display face only
+    -->
+    <link
+      href="https://fonts.googleapis.com/css2?family=Archivo:wght@300;400;500;600;700;800;900&family=Martian+Mono:wght@300;400;500;600;700;800&family=Syne:wght@700;800&display=swap"
+      rel="stylesheet"
+    />
+    <!-- Leaflet's stylesheet is imported from the package in main.tsx, not a CDN:
+         without it the map is visibly broken, and the prototype has to work with
+         no network. Web fonts fall back cleanly, so those stay remote. -->
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

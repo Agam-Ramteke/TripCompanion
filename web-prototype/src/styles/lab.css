@@ -1,0 +1,303 @@
+/* =============================================================================
+   Lab chrome — the desktop harness around the phone.
+   -----------------------------------------------------------------------------
+   Deliberately neutral so it never flatters one theme over the other. This is
+   the only part of the prototype that is not itself a design proposal.
+============================================================================= */
+
+.lab {
+  display: grid;
+  grid-template-columns: 312px 1fr;
+  height: 100vh;
+  overflow: hidden;
+  background:
+    linear-gradient(0deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px) 0 0 / 100% 28px,
+    linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px) 0 0 / 28px 100%,
+    #141518;
+}
+
+.lab__rail {
+  border-right: 1px solid #26272b;
+  background: #0f1013;
+  overflow-y: auto;
+  padding: 20px 18px 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.lab__brand {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.lab__brand-title {
+  font-family: 'Martian Mono', monospace;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #f4f4f4;
+  margin: 0;
+}
+
+.lab__brand-sub {
+  font-size: 0.6875rem;
+  color: #6f7178;
+  margin: 0;
+  line-height: 1.5;
+}
+
+.lab__group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.lab__legend {
+  font-family: 'Martian Mono', monospace;
+  font-size: 0.5625rem;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: #6f7178;
+  margin: 0;
+}
+
+.lab__row {
+  display: flex;
+  gap: 8px;
+}
+
+.lab__btn {
+  flex: 1;
+  min-height: 38px;
+  padding: 0 10px;
+  border: 1px solid #2e3036;
+  border-radius: 8px;
+  background: #16171b;
+  color: #b9bbc2;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  transition: all 0.14s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.lab__btn:hover {
+  border-color: #4a4d55;
+  color: #f4f4f4;
+}
+
+.lab__btn[aria-pressed='true'] {
+  background: #f4f4f4;
+  border-color: #f4f4f4;
+  color: #0f1013;
+}
+
+.lab__btn--wide {
+  width: 100%;
+}
+
+.lab__swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  flex: 0 0 auto;
+}
+
+.lab__slider {
+  width: 100%;
+  accent-color: #e5322b;
+}
+
+.lab__clock {
+  font-family: 'Martian Mono', monospace;
+  font-size: 1.125rem;
+  font-weight: 500;
+  letter-spacing: -0.03em;
+  color: #f4f4f4;
+  font-variant-numeric: tabular-nums;
+}
+
+.lab__clock-sub {
+  font-size: 0.6875rem;
+  color: #6f7178;
+  margin-top: 2px;
+}
+
+.lab__presets {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.lab__nav {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.lab__nav-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: 7px;
+  background: transparent;
+  color: #8e9098;
+  font-size: 0.75rem;
+  font-weight: 500;
+  text-align: left;
+  width: 100%;
+}
+
+.lab__nav-item:hover {
+  background: #16171b;
+  color: #f4f4f4;
+}
+
+.lab__nav-item[aria-current='true'] {
+  background: #1c1d22;
+  color: #f4f4f4;
+}
+
+.lab__nav-num {
+  font-family: 'Martian Mono', monospace;
+  font-size: 0.5625rem;
+  color: #55575e;
+  flex: 0 0 auto;
+  width: 14px;
+}
+
+.lab__note {
+  font-size: 0.6875rem;
+  line-height: 1.6;
+  color: #6f7178;
+  margin: 0;
+}
+
+.lab__note strong {
+  color: #b9bbc2;
+  font-weight: 600;
+}
+
+.lab__hr {
+  height: 1px;
+  background: #26272b;
+  border: 0;
+  margin: 0;
+}
+
+/* ── Stage ──────────────────────────────────────────────────────────────── */
+
+.lab__stage {
+  overflow: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 40px;
+  padding: 32px;
+}
+
+.lab__stage--compare {
+  gap: 28px;
+}
+
+.device {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  flex: 0 0 auto;
+}
+
+.device__label {
+  font-family: 'Martian Mono', monospace;
+  font-size: 0.5625rem;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #6f7178;
+}
+
+.phone {
+  width: 390px;
+  height: 844px;
+  flex: 0 0 auto;
+  border-radius: 44px;
+  padding: 10px;
+  background: linear-gradient(160deg, #34363c, #1a1b1f 55%, #2a2c31);
+  box-shadow:
+    0 30px 70px -20px rgba(0, 0, 0, 0.75),
+    0 0 0 1px rgba(255, 255, 255, 0.06) inset;
+  position: relative;
+}
+
+.phone__screen {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  border-radius: 35px;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+/* The status bar is part of the frame, not the design — it just anchors scale. */
+.phone__statusbar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 40px;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 24px;
+  font-family: 'Martian Mono', monospace;
+  font-size: 0.625rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--text);
+  pointer-events: none;
+  font-variant-numeric: tabular-nums;
+}
+
+.phone__notch {
+  position: absolute;
+  top: 9px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 92px;
+  height: 24px;
+  border-radius: 999px;
+  background: #08090b;
+  z-index: 31;
+}
+
+.phone__app {
+  position: absolute;
+  inset: 0;
+  padding-top: 40px;
+}
+
+/* Compare mode: two phones side by side, scaled to fit most laptops. */
+.lab__stage--compare .phone {
+  transform: scale(0.78);
+  transform-origin: center;
+  margin: -93px -43px;
+}
+
+@media (max-width: 1200px) {
+  .lab {
+    grid-template-columns: 268px 1fr;
+  }
+  .lab__stage .phone {
+    transform: scale(0.86);
+  }
+}

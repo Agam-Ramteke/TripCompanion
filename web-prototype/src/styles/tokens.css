@@ -1,0 +1,227 @@
+/* =============================================================================
+   Design tokens — spec §23
+   -----------------------------------------------------------------------------
+   Two themes, one component set. Every screen is built from these variables and
+   nothing else, so switching themes cannot change behaviour or data (§23).
+
+   The themes differ structurally, not only in palette:
+
+     nothing   hairline dividers, no card borders, wide negative space,
+               circular indicators, monochrome + one red, flat surfaces
+     brutalist 3px black borders on everything, hard offset shadows,
+               zero radius, yellow flood fills, tight spacing
+
+   Status is encoded differently on purpose, and that difference is one of the
+   questions the prototype exists to answer (§30). The Nothing theme carries
+   status with *form* — filled, hollow, struck, hatched — keeping a single red
+   for "now". The Brutalist theme carries it with flat fills.
+============================================================================= */
+
+:root {
+  --font-body: 'Archivo', 'Segoe UI', system-ui, sans-serif;
+  --font-mono: 'Martian Mono', ui-monospace, 'Cascadia Mono', monospace;
+  --font-display: 'Archivo', 'Segoe UI', system-ui, sans-serif;
+
+  /* Clock times are monospace in BOTH themes. Times are tabular data and must
+     align down a timeline column, so this is a product rule, not a style. */
+  --font-clock: var(--font-mono);
+
+  --step-0: 0.8125rem;
+  --step-1: 0.9375rem;
+  --step-2: 1.0625rem;
+  --step-3: 1.3125rem;
+  --step-4: 1.75rem;
+  --step-5: 2.5rem;
+  --step-6: 4rem;
+
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 22px;
+  --sp-6: 30px;
+  --sp-7: 44px;
+
+  --ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+/* ── Nothing-inspired ────────────────────────────────────────────────────── */
+/* An original interpretation: monochrome foundation, technical numerals, thin
+   rules, circular indicators. No proprietary Nothing assets are used. */
+[data-theme='nothing'] {
+  --bg: #000000;
+  --surface: #0b0b0b;
+  --surface-2: #131313;
+  --surface-3: #1b1b1b;
+  --line: #242424;
+  --line-strong: #3a3a3a;
+  --text: #f4f4f4;
+  --text-dim: #7e7e7e;
+  --text-faint: #4a4a4a;
+
+  --accent: #e5322b;
+  --accent-ink: #ffffff;
+  --accent-soft: rgba(229, 50, 43, 0.14);
+
+  --st-active: #e5322b;
+  --st-soon: #f4f4f4;
+  --st-upcoming: #7e7e7e;
+  --st-completed: #4a4a4a;
+  --st-skipped: #4a4a4a;
+  --st-missed: #8a8a8a;
+
+  --card-bg: var(--surface);
+  --card-border: 1px solid var(--line);
+  --card-radius: 14px;
+  --card-shadow: none;
+  --card-pad: var(--sp-4);
+
+  --chip-radius: 999px;
+  --chip-border: 1px solid var(--line-strong);
+  --control-radius: 10px;
+  --control-border: 1px solid var(--line-strong);
+  --control-weight: 500;
+  --btn-radius: 999px;
+  --btn-shadow: none;
+  --btn-weight: 500;
+  --btn-tracking: 0.06em;
+
+  --display-family: var(--font-mono);
+  --display-weight: 300;
+  --display-tracking: -0.045em;
+  --title-family: var(--font-display);
+  --title-weight: 500;
+  --title-tracking: -0.01em;
+  --title-transform: none;
+  --eyebrow-family: var(--font-mono);
+  --eyebrow-weight: 500;
+  --eyebrow-tracking: 0.2em;
+  --eyebrow-size: 0.625rem;
+
+  --spine-rail-w: 2px;
+  --spine-block-w: 6px;
+  --spine-block-radius: 999px;
+  --screen-pad: var(--sp-5);
+  --divider: 1px solid var(--line);
+  --icon-stroke: 1.6;
+
+  --focus-ring: 2px solid var(--st-soon);
+}
+
+/* ── Neo-Brutalist ──────────────────────────────────────────────────────── */
+/* Yellow + black identity. Yellow means "now", black means "done", and the one
+   clash colour is reserved for MISSED so it reads as a genuine alarm. */
+[data-theme='brutalist'] {
+  --bg: #fbfbf9;
+  --surface: #ffffff;
+  --surface-2: #ffe500;
+  --surface-3: #f0efe9;
+  --line: #000000;
+  --line-strong: #000000;
+  --text: #000000;
+  --text-dim: #4a4a4a;
+  --text-faint: #8a8a8a;
+
+  --accent: #ffe500;
+  --accent-ink: #000000;
+  --accent-soft: #fff8b0;
+
+  --st-active: #ffe500;
+  --st-soon: #ffffff;
+  --st-upcoming: #ffffff;
+  --st-completed: #000000;
+  --st-skipped: #d8d6cc;
+  --st-missed: #ff4d2e;
+
+  --card-bg: var(--surface);
+  --card-border: 3px solid var(--line);
+  --card-radius: 0px;
+  --card-shadow: 5px 5px 0 var(--line);
+  --card-pad: var(--sp-4);
+
+  --chip-radius: 0px;
+  --chip-border: 3px solid var(--line);
+  --control-radius: 0px;
+  --control-border: 3px solid var(--line);
+  --control-weight: 700;
+  --btn-radius: 0px;
+  --btn-shadow: 4px 4px 0 var(--line);
+  --btn-weight: 800;
+  --btn-tracking: 0.04em;
+
+  --display-family: 'Syne', var(--font-display);
+  --display-weight: 800;
+  --display-tracking: -0.03em;
+  --title-family: 'Syne', var(--font-display);
+  --title-weight: 800;
+  --title-tracking: -0.02em;
+  --title-transform: uppercase;
+  --eyebrow-family: var(--font-body);
+  --eyebrow-weight: 800;
+  --eyebrow-tracking: 0.1em;
+  --eyebrow-size: 0.6875rem;
+
+  --spine-rail-w: 3px;
+  --spine-block-w: 16px;
+  --spine-block-radius: 0px;
+  --screen-pad: var(--sp-4);
+  --divider: 3px solid var(--line);
+  --icon-stroke: 2.6;
+
+  --focus-ring: 3px solid #1f5cff;
+}
+
+/* =============================================================================
+   Reset
+============================================================================= */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+}
+
+body {
+  font-family: var(--font-body);
+  background: #141518;
+  color: #f4f4f4;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+  background: none;
+  border: none;
+  padding: 0;
+}
+
+:focus-visible {
+  outline: var(--focus-ring, 2px solid #1f5cff);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}

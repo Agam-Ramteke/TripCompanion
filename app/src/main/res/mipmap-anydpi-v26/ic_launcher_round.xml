@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    The round-masked variant, identical to `ic_launcher`.
+
+    Kept as its own file because the manifest's `android:roundIcon` points at it, and a
+    launcher that asks for the round icon should get an answer rather than falling back.
+    There is nothing to vary: an adaptive icon is masked by the launcher either way, so
+    the round mask is already handled by the 66dp safe zone the foreground sits inside.
+-->
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@drawable/ic_launcher_background" />
+    <foreground android:drawable="@mipmap/ic_launcher_foreground" />
+    <monochrome android:drawable="@mipmap/ic_launcher_monochrome" />
+</adaptive-icon>

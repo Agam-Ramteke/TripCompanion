@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Cleartext is off everywhere except one host.
+
+    indianrailapi.com publishes its endpoints over http. Rather than switch the whole app to
+    cleartext — which would also downgrade Nominatim search and the OpenStreetMap tile fetches —
+    the exception is scoped to that single domain. The provider still tries https first and only
+    falls back when TLS is genuinely unavailable, so this is a floor, not a preference.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false" />
+
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">indianrailapi.com</domain>
+    </domain-config>
+</network-security-config>

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    The logo's cream ground, as a flat fill.
+
+    A vector rather than a bitmap because it is one colour: the launcher stretches this
+    layer beyond the visible area for its parallax, and a solid fill has nothing to
+    resample. The value is sampled from `docs/Logo_src.png` — see
+    `branding/generate_launcher_icons.py`, which cuts the foreground out of the same file.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#FCF5ED"
+        android:pathData="M0,0h108v108h-108z" />
+</vector>

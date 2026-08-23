@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    The launcher icon: cream ground, the mountain-and-route monogram over it.
+
+    `monochrome` is what Android 13's themed icons tint to the wallpaper's palette. It is
+    the same artwork flattened to its alpha channel, and older platforms ignore the
+    element — so one file covers every version the app runs on (minSdk 26).
+
+    Both layers are generated. Do not hand-edit them; edit `docs/Logo_src.png` and re-run
+    `branding/generate_launcher_icons.py`.
+-->
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@drawable/ic_launcher_background" />
+    <foreground android:drawable="@mipmap/ic_launcher_foreground" />
+    <monochrome android:drawable="@mipmap/ic_launcher_monochrome" />
+</adaptive-icon>
