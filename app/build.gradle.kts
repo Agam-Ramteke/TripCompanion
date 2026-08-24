@@ -9,18 +9,29 @@ plugins {
 }
 
 /**
- * The RailRadar live-train API key, read from `local.properties` at configure time.
+ * API keys read from `local.properties` at configure time.
  *
- * `local.properties` is not in version control, so the key never reaches the repository. When
- * it is absent the value is empty, `TrainModule` binds the offline timetable projection
- * instead of the live provider, and the app works — just without live tracking.
+ * `local.properties` is not in version control, so no key ever reaches the repository. Each key is
+ * empty when absent, and the app degrades on its own:
  *
- * Set it as `RAILRADAR_API_KEY=your-key` in `local.properties` to turn live status on.
+ * - `RAILRADAR_API_KEY` — `TrainModule` binds the offline timetable projection instead of the live
+ *   provider, and the app works, just without live tracking.
+ * - `OPENROUTESERVICE_API_KEY` — the trip map draws straight legs between stops instead of
+ *   road-following lines. Everything else on the map is unaffected.
+ * - `MAPTILER_API_KEY` — the trip map falls back to the keyless CARTO raster basemap instead of the
+ *   low-contrast MapTiler style. The map is fully usable either way; only the cartography changes.
+ *
+ * Set them as `RAILRADAR_API_KEY=…` / `OPENROUTESERVICE_API_KEY=…` / `MAPTILER_API_KEY=…` in
+ * `local.properties` to turn those features on.
  */
-val railRadarApiKey: String = Properties().apply {
+val localProperties = Properties().apply {
     val file = rootProject.file("local.properties")
     if (file.exists()) file.inputStream().use { load(it) }
-}.getProperty("RAILRADAR_API_KEY").orEmpty().trim()
+}
+val railRadarApiKey: String = localProperties.getProperty("RAILRADAR_API_KEY").orEmpty().trim()
+val openRouteServiceApiKey: String =
+    localProperties.getProperty("OPENROUTESERVICE_API_KEY").orEmpty().trim()
+val mapTilerApiKey: String = localProperties.getProperty("MAPTILER_API_KEY").orEmpty().trim()
 
 android {
     namespace = "com.tripcompanion.app"
@@ -37,6 +48,8 @@ android {
 
         // Quoted because buildConfigField writes its value into generated Java verbatim.
         buildConfigField("String", "RAILRADAR_API_KEY", "\"$railRadarApiKey\"")
+        buildConfigField("String", "OPENROUTESERVICE_API_KEY", "\"$openRouteServiceApiKey\"")
+        buildConfigField("String", "MAPTILER_API_KEY", "\"$mapTilerApiKey\"")
 
         ksp {
             arg("room.schemaLocation", "$projectDir/schemas")
@@ -64,7 +77,7 @@ android {
 
     buildFeatures {
         compose = true
-        // Needed for the RAILRADAR_API_KEY field above.
+        // Needed for the RAILRADAR / OPENROUTESERVICE / MAPTILER API-key fields above.
         buildConfig = true
     }
 

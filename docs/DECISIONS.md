@@ -149,6 +149,116 @@ Format: Decision · Status · Context/why · Evidence · Consequences.
 - **Consequences:** **Route argument names are load-bearing** — renaming one without updating the
   matching `SavedStateHandle` read breaks that screen silently (lands on empty state, no crash).
 
+## ADR-014 — Keyed pastel basemap (MapTiler prebuilt raster) with graceful CARTO fallback; tiles stay UI-map, not a domain port
+
+- **Status:** Accepted, in force (Map-redesign pass, **uncommitted**).
+- **Context:** The trip map read as a generic high-contrast street screenshot with app chrome
+  floating on top. A low-contrast, warm basemap that *recedes* makes the plan (route + numbered
+  stops) the subject. MapTiler's prebuilt raster styles give that with **no client-side style
+  engine** — a plain XYZ tile URL, the same shape osmdroid already consumes for CARTO/Esri. The one
+  wrinkle vs. ADR-003: a *tile source* is inherently an osmdroid (`OnlineTileSourceBase`) type, so it
+  cannot live behind a domain port the way RailRadar/ORS do. It stays in the UI map component
+  (`ui/components/OsmMap.kt`) next to the existing CARTO/Esri sources; **only the secret is new**, and
+  it crosses via `BuildConfig` exactly like the RailRadar/ORS keys — nothing HTTP/vendor leaks above
+  `data/`+UI-map. When the key is blank the map falls back to the keyless CARTO Voyager/DarkMatter
+  sets, so the app is fully usable unkeyed.
+- **Evidence:** `app/build.gradle.kts` reads `MAPTILER_API_KEY` from `local.properties` →
+  `BuildConfig.MAPTILER_API_KEY`; `OsmMap.kt` `maptilerSource(styleId, key)` (URL
+  `https://api.maptiler.com/maps/{style}/256/{z}/{x}/{y}.png?key=…`), style ids `MAPTILER_LIGHT_STYLE
+  = "dataviz"` / `MAPTILER_DARK_STYLE = "dataviz-dark"`, and the `BuildConfig.MAPTILER_API_KEY.isNotBlank()`
+  fork to `VoyagerTiles`/`DarkMatterTiles`; attribution names MapTiler only when it is the live source.
+- **Consequences:** The palette is swappable by changing two constants (`landscape`/`pastel`/`bright-v2`
+  are the warmer prebuilt alternatives) — no code path. The MapTiler key is a **secret**: `local.properties`
+  only, never committed or logged. A `403` in logcat means a bad/absent key (falls back to CARTO). Do
+  **not** promote tiles to a domain port — that fights osmdroid's type model for no isolation gain.
+
+## ADR-015 — Device location via the framework `LocationManager` (no Google Play Services), behind a `DeviceLocationProvider` port
+
+- **Status:** Accepted, in force (Map-redesign pass, **uncommitted**).
+- **Context:** The map needs a "where am I" dot, GPS-anchored search later, and (per spec) proximity
+  trip-state. The fused-location provider would pull in Play Services — a proprietary dependency the
+  app has deliberately avoided everywhere else (osmdroid tiles, not the Maps SDK; keyless basemaps).
+  The framework `LocationManager` gives a good-enough glanceable fix with **zero new dependencies**
+  and works on a de-Googled device, at the cost of a little more code (two providers to juggle, a
+  last-known seed).
+- **Evidence:** `domain/service/DeviceLocationProvider.kt` (`DeviceLocation(latitude, longitude,
+  accuracyMeters: Float?)`, `fun locationUpdates(): Flow<DeviceLocation?>`); impl
+  `data/location/AndroidDeviceLocationProvider.kt` (framework `LocationManager` via `callbackFlow`,
+  GPS+NETWORK, last-known seed, `@SuppressLint("MissingPermission")` guarded by `hasPermission()`);
+  bound in `di/LocationModule.kt`; `ACCESS_FINE_LOCATION` + `ACCESS_COARSE_LOCATION` in the manifest.
+- **Consequences:** Follows the §11 port pattern — swapping to a fused provider later is one binding,
+  no ViewModel/screen change. A missing permission or disabled provider is emitted as a **null fix**
+  (the ordinary "no location" state), never a thrown `SecurityException`; the map draws no dot and
+  center-on-me falls back to recentring on the trip. The app must remain fully usable with permission
+  **denied**.
+
+## ADR-016 — Road routing via OpenRouteService behind a `RoutePlanService` port; per-leg segments; straight-line fallback
+
+- **Status:** Accepted, in force (Map-redesign pass, **uncommitted**).
+- **Context:** Connecting stops with straight lines misrepresents travel; a road-following polyline
+  with real per-gap distance/time makes the itinerary honest. ORS gives keyed multi-stop directions
+  as GeoJSON. Routing has **no offline projection** to compute (unlike trains), so there is one
+  provider, always bound; the key decides whether it reaches the network, and an unconfigured/failed
+  route degrades to a great-circle **haversine** distance with **no invented drive time**.
+- **Evidence:** `domain/service/RoutePlanService.kt` (`RoutePoint`, `RouteLeg(distanceMeters,
+  durationSeconds)`, `PlannedRoute(points, legs)`, `RoutePlanOutcome.{Routed(points, legs),
+  Unavailable(error)}`, `RoutePlanError`); provider `data/network/openrouteservice/OpenRouteServiceRouteProvider.kt`
+  (POST `…/v2/directions/driving-car/geojson`, key in the `Authorization` header, parses
+  `features[0].properties.segments[].{distance,duration}` alongside geometry); policy
+  `data/routing/DefaultRoutePlanService.kt` (`MIN_WAYPOINTS=2`, `MAX_WAYPOINTS=50`,
+  `ROUTE_TIMEOUT_MS=12_000`); bound in `di/RoutingModule.kt`; `TripMapViewModel` aligns `legs` to the
+  visible pins (leg *i* = pin *i*→*i*+1) and discards a leg breakdown **wholesale** when its count
+  ≠ gap count. Covered by `OpenRouteServiceRouteProviderTest` (segment→leg parse) and
+  `TripMapViewModelTest` (haversine fallback / routed passthrough / partial-breakdown discard).
+- **Consequences:** New geometry-vs-legs shape is an **additive** contract change (documented in
+  API_CONTRACTS). Never pair a partial leg list against the gaps — a distance under the wrong gap is
+  worse than an honest straight line. ORS key is a secret (`local.properties` → `BuildConfig`); a
+  `401` in logcat means it was rejected. The driving-car profile is baked in (a trip map is a driving
+  plan); a mode selector would be a future extension.
+
+## ADR-017 — Numbered status markers derived from `TripStateEngine`, not place-typed pins
+
+- **Status:** Accepted, in force (Map-redesign pass, **uncommitted**).
+- **Context:** Giant Google-style type-glyph pins fight the recede-behind basemap and don't tie the
+  map to the sheet. Instead each stop is a small **numbered** chip whose number equals the sheet
+  card's `orderInDay`, in one of three states — Completed (muted, a check), Upcoming (the event's
+  category colour, quiet), Current/Next (largest, accent, shadow + restrained halo). State is derived
+  from the **same** `TripStateEngine.computeEventStatus(event, now)` the Home card uses, so map and
+  Home always agree, and it keys off `EventStatus`/`EventType` — never a place name (ADR-004).
+- **Evidence:** `OsmMap.kt` `enum class MarkerState { Completed, Upcoming, Current }`,
+  `data class MapMarker(… state)`, `MapPinMarker` rendering the three chips; `TripMapScreen`'s
+  `markerStateOf` maps engine status → `MarkerState`.
+- **Consequences:** The number is the primary content (no type glyph on the pin). Marker/sheet
+  numbers must stay in lockstep — both come from `orderInDay`. Do not reintroduce category type-icon
+  pins as the *primary* marker; category colour is a tint, not a glyph.
+
+## ADR-018 — External turn-by-turn via `ExternalNavigator` Intent; no in-app navigation
+
+- **Status:** Accepted, in force (Map-redesign pass, **uncommitted**).
+- **Context:** The in-app osmdroid map is for *display and planning*. Turn-by-turn is a solved problem
+  owned by the user's maps app; reimplementing it would be a large, redundant surface. The Navigate
+  action fires a platform `Intent`.
+- **Evidence:** `core/util/ExternalNavigator.kt` (`navigateTo(context, latitude, longitude, label)` —
+  tries `google.navigation:q=lat,lon`, catches `ActivityNotFoundException`, falls back to
+  `geo:0,0?q=lat,lon(label)`, absorbs a second failure silently). Pure platform Intent — no `data/`
+  footprint, no §11 concern.
+- **Consequences:** No in-app routing UI to maintain. If neither a navigation app nor a `geo:` handler
+  exists the action is a silent no-op (acceptable — the map still shows the stop). Not to be confused
+  with ORS road-line *display* (ADR-016), which is in-app.
+
+## ADR-019 — Map top label reads "Day N · <trip name>" (name-over-city tradeoff accepted)
+
+- **Status:** Accepted, in force (Map-redesign pass, **uncommitted**).
+- **Context:** The floating top pill needs a stable, cheap label. Reverse-geocoding the day's city
+  would add a network call and a failure mode; the trip name is already in hand. Chosen **knowingly**:
+  on a trip whose days span cities, the pill may show the trip name over a different-city day. Map,
+  pins, route and sheet always agree because they are all driven by the **selected day**; only the
+  *name text* is the trip's, by design.
+- **Evidence:** `TripMapScreen` `dayTripLabel(...)` → the centred `DayTripPill`; the day switcher
+  (`MapDaySwitcher`) sits beneath it. No reverse-geocode call on this screen.
+- **Consequences:** Do **not** re-litigate this as a bug — it is the accepted tradeoff. A future
+  per-day city label would require a reverse-geocode capability (new port) and is out of scope here.
+
 ---
 
 *If you add a decision here, also enforce it where it lives (code/comment/test) — a decision only

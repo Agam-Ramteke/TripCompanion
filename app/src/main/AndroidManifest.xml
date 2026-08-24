@@ -4,6 +4,16 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
+    <!--
+        Location is optional: the map's "where am I" dot and center-on-me. Coarse and fine are both
+        declared so the runtime prompt offers "precise" and "approximate"; the app works fully if the
+        user grants neither (no dot, center-on-me recenters on the trip instead). Framework
+        LocationManager only — no Play Services — so no background-location or hardware feature is
+        required.
+    -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+
     <application
         android:name=".TripCompanionApp"
         android:allowBackup="true"
