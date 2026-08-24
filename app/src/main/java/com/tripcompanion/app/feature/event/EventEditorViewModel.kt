@@ -73,12 +73,16 @@ class EventEditorViewModel @Inject constructor(
      * existing one keeps the place it was saved with.
      */
     private val presetLocationId: Long? = savedStateHandle.get<String>("locationId")?.toLongOrNull()
+    private val initialDateString: String? = savedStateHandle.get<String>("date")
+    private val initialDate: LocalDate = initialDateString?.let {
+        try { LocalDate.parse(it) } catch (e: Exception) { null }
+    } ?: timeProvider.now().toLocalDate()
 
     private val _state = MutableStateFlow(
         EventEditorState(
             tripId = tripId,
-            startDate = timeProvider.now().toLocalDate(),
-            endDate = timeProvider.now().toLocalDate(),
+            startDate = initialDate,
+            endDate = initialDate,
             startTime = timeProvider.now().toLocalTime().withSecond(0).withNano(0),
             endTime = timeProvider.now().toLocalTime().plusHours(1).withSecond(0).withNano(0)
         )

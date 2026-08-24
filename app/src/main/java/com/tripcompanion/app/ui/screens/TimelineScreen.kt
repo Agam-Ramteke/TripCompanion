@@ -75,7 +75,7 @@ import java.time.LocalDateTime
 @Composable
 fun TimelineScreen(
     onNavigateToEventDetail: (Long) -> Unit,
-    onNavigateToAddEvent: (Long) -> Unit,
+    onNavigateToAddEvent: (Long, String?) -> Unit,
     onNavigateToEditEvent: (Long, Long) -> Unit,
     onNavigateToMap: (Long) -> Unit,
     onNavigateToTrainDetail: (Long) -> Unit,
@@ -121,7 +121,7 @@ fun TimelineScreen(
             ItineraryHeader(
                 state = state,
                 tripName = trip.name,
-                onAdd = { onNavigateToAddEvent(trip.id) },
+                onAdd = { onNavigateToAddEvent(trip.id, state.selectedDay?.toString()) },
                 onMap = { onNavigateToMap(trip.id) },
                 onToggleCompleted = viewModel::setShowCompleted
             )
@@ -151,7 +151,7 @@ fun TimelineScreen(
                             message = "Add where you're going, what you're doing and when, " +
                                 "and it lines up here in order.",
                             actionLabel = "Add an activity",
-                            onAction = { onNavigateToAddEvent(trip.id) }
+                            onAction = { onNavigateToAddEvent(trip.id, state.selectedDay?.toString()) }
                         )
                     }
                 }
@@ -212,7 +212,7 @@ fun TimelineScreen(
             Box(Modifier.padding(horizontal = metrics.screenPadding)) {
                 SecondaryButton(
                     text = "Add to this day",
-                    onClick = { onNavigateToAddEvent(trip.id) },
+                    onClick = { onNavigateToAddEvent(trip.id, state.selectedDay?.toString()) },
                     icon = Icons.Default.Add
                 )
             }

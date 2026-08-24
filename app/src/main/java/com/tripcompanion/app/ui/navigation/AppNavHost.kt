@@ -247,8 +247,8 @@ fun AppNavHost() {
                     onNavigateToEventDetail = { eventId ->
                         navController.navigate(Routes.EventDetail.createRoute(eventId))
                     },
-                    onNavigateToAddEvent = { tripId ->
-                        navController.navigate(Routes.EventEditor.createRoute(tripId))
+                    onNavigateToAddEvent = { tripId, date ->
+                        navController.navigate(Routes.EventEditor.createRoute(tripId = tripId, date = date))
                     },
                     onNavigateToEditEvent = { tripId, eventId ->
                         navController.navigate(Routes.EventEditor.createRoute(tripId, eventId))

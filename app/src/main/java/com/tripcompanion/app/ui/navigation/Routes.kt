@@ -48,11 +48,12 @@ sealed class Routes(val route: String) {
      * `locationId` is how Place Detail adds somewhere to the itinerary: it knows the place but
      * not yet the activity, so it hands the place over and the editor opens with it attached.
      */
-    data object EventEditor : Routes("event/editor/{tripId}?eventId={eventId}&locationId={locationId}") {
-        fun createRoute(tripId: Long, eventId: Long? = null, locationId: Long? = null): String {
+    data object EventEditor : Routes("event/editor/{tripId}?eventId={eventId}&locationId={locationId}&date={date}") {
+        fun createRoute(tripId: Long, eventId: Long? = null, locationId: Long? = null, date: String? = null): String {
             val query = buildList {
                 if (eventId != null) add("eventId=$eventId")
                 if (locationId != null) add("locationId=$locationId")
+                if (date != null) add("date=$date")
             }
             val base = "event/editor/$tripId"
             return if (query.isEmpty()) base else base + "?" + query.joinToString("&")
