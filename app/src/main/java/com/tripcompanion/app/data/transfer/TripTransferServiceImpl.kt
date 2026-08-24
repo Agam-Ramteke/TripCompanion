@@ -86,7 +86,10 @@ class TripTransferServiceImpl @Inject constructor(
             val bundle = TripBundle(
                 trip = trip.copy(coverImageUri = images.carry(trip.coverImageUri)),
                 places = places,
-                events = events,
+                // Each activity may carry a Home-card background photo (Task 3); bundle its bytes
+                // like every other image. `carry` only rewrites the URI, never the id, so the
+                // associations below still key off the same event ids.
+                events = events.map { it.copy(backgroundImageUri = images.carry(it.backgroundImageUri)) },
                 activities = events.associate { it.id to activityRepository.getActivitiesForEvent(it.id).first() }
                     .filterValues { it.isNotEmpty() },
                 photos = events.associate { event ->
@@ -216,7 +219,8 @@ class TripTransferServiceImpl @Inject constructor(
                     event.copy(
                         id = 0,
                         tripId = tripId,
-                        locationId = event.locationId?.let(placeIds::get)
+                        locationId = event.locationId?.let(placeIds::get),
+                        backgroundImageUri = local(event.backgroundImageUri)
                     )
                 )
                 eventIds[event.id] = eventId

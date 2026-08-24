@@ -117,6 +117,7 @@ class EntityMapperTest {
             locationId = 5,
             whatWeAreDoing = "Explore ancient art galleries and view special samurai exhibitions.",
             notes = "Meet guide at main lobby",
+            backgroundImageUri = "file:///data/user/0/com.tripcompanion.app/files/img_bg.jpg",
             status = EventStatus.UPCOMING,
             order = 1
         )
@@ -127,6 +128,9 @@ class EntityMapperTest {
         assertEquals(domain.tripId, entity.tripId)
         assertEquals(domain.type.name, entity.type)
         assertEquals(domain.whatWeAreDoing, entity.whatWeAreDoing)
+        // The Task 3 Home-card photo is a real column, not a computed value — a mapper that
+        // forgot it would read back null on the user's phone.
+        assertEquals(domain.backgroundImageUri, entity.backgroundImageUri)
         assertEquals(domain.status.name, entity.status)
         assertEquals(domain, entity.toDomain())
     }

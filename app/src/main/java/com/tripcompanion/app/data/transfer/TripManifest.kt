@@ -250,6 +250,10 @@ internal object TripManifest {
         putIfPresent("placeId", event.locationId)
         put("whatWeAreDoing", event.whatWeAreDoing)
         put("notes", event.notes)
+        // The activity's Home-card photo, carried like every other image as an archive entry name
+        // (see the class KDoc) rather than a device-local URI. Absent on trips exported before the
+        // field existed, which an older or newer reader alike simply treats as "no background".
+        putIfPresent("backgroundImage", event.backgroundImageUri)
         put("status", event.status.name)
         put("order", event.order)
         put("createdAt", event.createdAt.toString())
@@ -269,6 +273,7 @@ internal object TripManifest {
         locationId = json.longOrNull("placeId"),
         whatWeAreDoing = json.optString("whatWeAreDoing"),
         notes = json.optString("notes"),
+        backgroundImageUri = json.stringOrNull("backgroundImage"),
         // The user's own ruling on a stop travels; the engine derives every other status from the
         // clock anyway (§21), so a stored UPCOMING is simply what it will recompute on arrival.
         status = json.enum("status", EventStatus.UPCOMING),
