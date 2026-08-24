@@ -9,18 +9,18 @@ plugins {
 }
 
 /**
- * The live-train API key, read from `local.properties` at configure time.
+ * The RailRadar live-train API key, read from `local.properties` at configure time.
  *
  * `local.properties` is not in version control, so the key never reaches the repository. When
  * it is absent the value is empty, `TrainModule` binds the offline timetable projection
  * instead of the live provider, and the app works — just without live tracking.
  *
- * Set it as `INDIANRAIL_API_KEY=your-key` in `local.properties` to turn live status on.
+ * Set it as `RAILRADAR_API_KEY=your-key` in `local.properties` to turn live status on.
  */
-val indianRailApiKey: String = Properties().apply {
+val railRadarApiKey: String = Properties().apply {
     val file = rootProject.file("local.properties")
     if (file.exists()) file.inputStream().use { load(it) }
-}.getProperty("INDIANRAIL_API_KEY").orEmpty().trim()
+}.getProperty("RAILRADAR_API_KEY").orEmpty().trim()
 
 android {
     namespace = "com.tripcompanion.app"
@@ -30,13 +30,13 @@ android {
         applicationId = "com.tripcompanion.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0-phase1"
+        versionCode = 3
+        versionName = "3.0"
 
         testInstrumentationRunner = "com.tripcompanion.app.HiltTestRunner"
 
         // Quoted because buildConfigField writes its value into generated Java verbatim.
-        buildConfigField("String", "INDIANRAIL_API_KEY", "\"$indianRailApiKey\"")
+        buildConfigField("String", "RAILRADAR_API_KEY", "\"$railRadarApiKey\"")
 
         ksp {
             arg("room.schemaLocation", "$projectDir/schemas")
@@ -64,7 +64,7 @@ android {
 
     buildFeatures {
         compose = true
-        // Needed for the INDIANRAIL_API_KEY field above.
+        // Needed for the RAILRADAR_API_KEY field above.
         buildConfig = true
     }
 

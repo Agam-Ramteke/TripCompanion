@@ -7,7 +7,7 @@ import javax.inject.Qualifier
  *
  * A `File` rather than a `Context` so [TripTransferServiceImpl] has no Android import in it and
  * can be tested against a temporary directory on a plain JVM. Declared beside the consumer, the
- * way [com.tripcompanion.app.data.network.IndianRailApiKey] is, because nothing else in the app
+ * way [com.tripcompanion.app.data.network.railradar.RailRadarApiKey] is, because nothing else in the app
  * injects a bare `File` and a qualifier in `di/` would suggest otherwise.
  */
 @Qualifier

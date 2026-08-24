@@ -19,6 +19,9 @@ import com.tripcompanion.app.domain.model.TrainFare
 import com.tripcompanion.app.domain.model.TrainPassenger
 import com.tripcompanion.app.domain.model.Trip
 import com.tripcompanion.app.domain.service.JourneyEventLinker
+import com.tripcompanion.app.domain.service.PnrLookupError
+import com.tripcompanion.app.domain.service.PnrLookupOutcome
+import com.tripcompanion.app.domain.service.PnrLookupService
 import com.tripcompanion.app.domain.service.TicketImportError
 import com.tripcompanion.app.domain.service.TicketImportOutcome
 import com.tripcompanion.app.domain.service.TicketImportService
@@ -69,6 +72,7 @@ class TrainEditorViewModelTest {
     private lateinit var trains: TrainRepositoryImpl
     private lateinit var linker: JourneyEventLinker
     private lateinit var importer: FakeTicketImportService
+    private lateinit var pnrLookup: FakePnrLookupService
 
     private var tripId = 0L
 
@@ -82,6 +86,9 @@ class TrainEditorViewModelTest {
             db.trainDao, db.trainPassengerDao, db.trainStopDao, db.trainRunStatusDao
         )
         importer = FakeTicketImportService()
+        // No key configured by default: the PNR affordance is hidden, which is the state every
+        // test here but the PNR ones runs in. The PNR tests flip isAvailable and set an outcome.
+        pnrLookup = FakePnrLookupService()
         // The real linker over the real repositories: saving a booking here writes the itinerary
         // row too, which is the point — a train that is not on the plan is the bug this prevents.
         linker = JourneyEventLinker(events, trains)
@@ -842,6 +849,7 @@ class TrainEditorViewModelTest {
             tripRepository = trips,
             ticketImportService = importer,
             journeyEventLinker = linker,
+            pnrLookupService = pnrLookup,
             timeProvider = clock
         )
         advanceUntilIdle()
@@ -943,6 +951,24 @@ class TrainEditorViewModelTest {
 
         override suspend fun readTicket(bytes: ByteArray): TicketImportOutcome {
             readCount++
+            return outcome
+        }
+    }
+
+    /**
+     * The PNR lookup, stubbed the way [FakeTicketImportService] stubs the importer.
+     *
+     * [isAvailable] defaults to false so the editor behaves as it does with no API key — the state
+     * almost every test here runs in. A PNR test sets it true and points [outcome] at a booking or
+     * a failure. [lookupCount] proves the double-tap guard, the same role [readCount] plays.
+     */
+    private class FakePnrLookupService : PnrLookupService {
+        override var isAvailable: Boolean = false
+        var outcome: PnrLookupOutcome = PnrLookupOutcome.Failed(PnrLookupError.NOT_CONFIGURED)
+        var lookupCount = 0
+
+        override suspend fun lookup(pnr: String): PnrLookupOutcome {
+            lookupCount++
             return outcome
         }
     }

@@ -18,6 +18,9 @@ import com.tripcompanion.app.domain.repository.EventRepository
 import com.tripcompanion.app.domain.repository.TrainRepository
 import com.tripcompanion.app.domain.repository.TripRepository
 import com.tripcompanion.app.domain.service.JourneyEventLinker
+import com.tripcompanion.app.domain.service.PnrLookupError
+import com.tripcompanion.app.domain.service.PnrLookupOutcome
+import com.tripcompanion.app.domain.service.PnrLookupService
 import com.tripcompanion.app.domain.service.TicketImportError
 import com.tripcompanion.app.domain.service.TicketImportOutcome
 import com.tripcompanion.app.domain.service.TicketImportService
@@ -138,6 +141,20 @@ data class TrainEditorUiState(
     /** What the parse could not settle. Worded by the screen, not here. */
     val importWarnings: List<TicketImportWarning> = emptyList(),
     val importError: TicketImportError? = null,
+    /** A PNR is being looked up. The form stays usable; only the fetch button waits. */
+    val isFetchingPnr: Boolean = false,
+    /**
+     * Confirmation that a PNR lookup landed, in a sentence.
+     *
+     * Separate from [importSummary] because the two sources fill from different places and say
+     * different things — a PNR brings seats but no names, and the sentence has to admit that.
+     * Cleared by [TrainEditorViewModel.dismissPnrNotice].
+     */
+    val pnrSummary: String? = null,
+    /** Why a PNR lookup failed, as a finished sentence — worded in the view model, not the screen. */
+    val pnrError: String? = null,
+    /** Whether a PNR lookup can be made at all. False binds no fetch button. */
+    val isPnrLookupAvailable: Boolean = false,
     val isSaving: Boolean = false,
     val isLoading: Boolean = true,
     val error: String? = null
@@ -175,6 +192,16 @@ data class TrainEditorUiState(
             .filter { it != TrainBookingStatus.NOT_BOOKED }
             .minByOrNull { it.settledness }
             ?: bookingStatus
+
+    /**
+     * Whether the "fetch booking status" affordance should work.
+     *
+     * A PNR is exactly ten digits, the lookup has to be configured, and one must not already be
+     * in flight. The button is hidden entirely when [isPnrLookupAvailable] is false, so this only
+     * gates the enabled state once it is shown at all.
+     */
+    val canFetchPnr: Boolean
+        get() = isPnrLookupAvailable && pnr.length == 10 && !isFetchingPnr
 }
 
 @HiltViewModel
@@ -184,6 +211,7 @@ class TrainEditorViewModel @Inject constructor(
     private val eventRepository: EventRepository,
     private val tripRepository: TripRepository,
     private val ticketImportService: TicketImportService,
+    private val pnrLookupService: PnrLookupService,
     private val journeyEventLinker: JourneyEventLinker,
     private val timeProvider: TimeProvider
 ) : ViewModel() {
@@ -192,7 +220,11 @@ class TrainEditorViewModel @Inject constructor(
     private val editingId: Long? = savedStateHandle.get<String>("trainId")?.toLongOrNull()
 
     private val _state = MutableStateFlow(
-        TrainEditorUiState(tripId = tripId, journeyDate = timeProvider.now().toLocalDate())
+        TrainEditorUiState(
+            tripId = tripId,
+            journeyDate = timeProvider.now().toLocalDate(),
+            isPnrLookupAvailable = pnrLookupService.isAvailable
+        )
     )
     val state: StateFlow<TrainEditorUiState> = _state.asStateFlow()
 
@@ -398,6 +430,83 @@ class TrainEditorViewModel @Inject constructor(
         it.copy(importSummary = null, importWarnings = emptyList(), importError = null)
     }
 
+    // ── Fetching booking status by PNR ──────────────────────────────────────────
+
+    /**
+     * Fills the form from a PNR lookup.
+     *
+     * The RailRadar twin of [importTicket]: the booking behind the PNR arrives as the same
+     * [ParsedTicket] a scanned e-ticket produces, lands in the same editable controls, and the
+     * same Save applies. A PNR is thinner than a PDF, though — it brings the train, the route
+     * ends, the boarding point and each passenger's coach, berth and status, but no names and no
+     * clock times — so [withParsedTicket] leaves the dates alone and [pnrSuccessText] says out
+     * loud that the names are still to fill.
+     *
+     * Nothing happens without a usable PNR: [TrainEditorUiState.canFetchPnr] gates the button and
+     * this rechecks it, so a lookup is never spent on a number that cannot succeed.
+     */
+    fun fetchPnr() {
+        val current = _state.value
+        if (current.isFetchingPnr || !current.canFetchPnr) return
+        val pnr = current.pnr
+        _state.update {
+            it.copy(
+                isFetchingPnr = true,
+                pnrError = null,
+                pnrSummary = null,
+                importSummary = null,
+                importWarnings = emptyList(),
+                importError = null
+            )
+        }
+        viewModelScope.launch {
+            when (val outcome = pnrLookupService.lookup(pnr)) {
+                is PnrLookupOutcome.Failed ->
+                    _state.update { it.copy(isFetchingPnr = false, pnrError = pnrErrorText(outcome.error)) }
+
+                is PnrLookupOutcome.Found ->
+                    _state.update {
+                        it.withParsedTicket(outcome.ticket).copy(
+                            isFetchingPnr = false,
+                            pnrError = null,
+                            pnrSummary = pnrSuccessText(outcome.ticket)
+                        )
+                    }
+            }
+        }
+    }
+
+    fun dismissPnrNotice() = _state.update { it.copy(pnrSummary = null, pnrError = null) }
+
+    /**
+     * What a landed PNR says, admitting the gap.
+     *
+     * The seats came across; the names did not, because Indian Railways does not expose them over
+     * a PNR — so the sentence points the user at the rows that still need a name rather than
+     * letting a "3 passengers" leave them thinking the import was complete.
+     */
+    private fun pnrSuccessText(ticket: ParsedTicket): String {
+        val count = ticket.passengers.size
+        return if (count == 0) {
+            "Fetched the booking. It listed no passengers — add them by hand."
+        } else {
+            val people = if (count == 1) "passenger" else "passengers"
+            "Filled in from the PNR — $count $people. Coach, berth and status came across; a PNR " +
+                "carries no names, so add those."
+        }
+    }
+
+    /** A finished sentence for each lookup failure. The screen only chooses the colour. */
+    private fun pnrErrorText(error: PnrLookupError): String = when (error) {
+        PnrLookupError.NOT_CONFIGURED -> "Live lookups need a RailRadar key."
+        PnrLookupError.NETWORK_UNAVAILABLE -> "Couldn't reach RailRadar. Check your connection."
+        PnrLookupError.TIMEOUT -> "RailRadar didn't answer in time. Try again."
+        PnrLookupError.RATE_LIMITED -> "RailRadar's request limit was reached. Give it a minute."
+        PnrLookupError.NOT_FOUND -> "No booking found for that PNR."
+        PnrLookupError.MALFORMED -> "RailRadar sent something we couldn't read."
+        PnrLookupError.UNKNOWN -> "Couldn't fetch that PNR."
+    }
+
     fun save(onSaved: (Long) -> Unit) {
         val current = _state.value
         if (!current.canSave || current.isSaving) return
@@ -472,24 +581,29 @@ private fun TrainBookingStatus.orConfirmed(): TrainBookingStatus =
     if (this == TrainBookingStatus.NOT_BOOKED) TrainBookingStatus.CONFIRMED else this
 
 /**
- * The form, with everything a ticket had to say written into it.
+ * The form, with everything a parsed booking had to say written into it.
  *
- * Field by field rather than wholesale: a blank on the ticket never overwrites something the
+ * Shared by the e-ticket import and the PNR lookup, because both arrive as a [ParsedTicket] and
+ * both fill the same form — the only difference is the sentence each shows afterwards, which is
+ * its caller's to add. This function sets no notice fields, so neither source can leave the
+ * other's confirmation on screen.
+ *
+ * Field by field rather than wholesale: a blank on the source never overwrites something the
  * user already typed. Someone who filled in the train number by hand and then imported the PDF
  * to save typing the party keeps their number if the parse missed it.
  *
- * The dates are the delicate part. A ticket that printed no arrival time leaves the arrival
- * fields exactly as they were, which usually means the arrival is no longer after the departure
- * and `canSave` refuses — deliberately. That is the one thing on this form the document could
- * not tell us, and inventing it would put a countdown on the Home screen against a moment
- * nobody chose.
+ * The dates are the delicate part. A source that carried no arrival time — every PNR, and the
+ * older ticket layout — leaves the arrival fields exactly as they were, which usually means the
+ * arrival is no longer after the departure and `canSave` refuses, deliberately. That is the one
+ * thing on this form the source could not tell us, and inventing it would put a countdown on the
+ * Home screen against a moment nobody chose.
  *
- * [TrainEditorUiState.source] becomes the imported booking, so the fare, the quota, the agent's
+ * [TrainEditorUiState.source] becomes the parsed booking, so the fare, the quota, the agent's
  * booking id and the transaction id ride along to the save even though this form has no control
  * for any of them. The row's own identity does not: id, creation date and the delay someone
  * entered from a platform announcement all belong to the record, not to the document.
  */
-private fun TrainEditorUiState.applying(ticket: ParsedTicket): TrainEditorUiState {
+private fun TrainEditorUiState.withParsedTicket(ticket: ParsedTicket): TrainEditorUiState {
     val date = ticket.departure?.toLocalDate() ?: journeyDate
     val depTime = ticket.departure?.toLocalTime() ?: departureTime
     val arrTime = ticket.arrival?.toLocalTime() ?: arrivalTime
@@ -502,14 +616,6 @@ private fun TrainEditorUiState.applying(ticket: ParsedTicket): TrainEditorUiStat
         arrival = LocalDateTime.of(if (nextDay) date.plusDays(1) else date, arrTime),
         eventId = linkedEventId
     )
-
-    val issuer = ticket.agentName.takeIf { it.isNotBlank() }?.let { "$it e-ticket" } ?: "e-ticket"
-    val summary = if (party.isEmpty()) {
-        "Filled in from the $issuer."
-    } else {
-        "Filled in from the $issuer — ${party.size} " +
-            if (party.size == 1) "passenger." else "passengers."
-    }
 
     return copy(
         number = ticket.trainNumber.ifBlank { number },
@@ -530,11 +636,31 @@ private fun TrainEditorUiState.applying(ticket: ParsedTicket): TrainEditorUiStat
             id = source?.id ?: 0L,
             knownDelayMinutes = source?.knownDelayMinutes ?: 0,
             createdAt = source?.createdAt ?: imported.createdAt
-        ),
+        )
+    )
+}
+
+/**
+ * [withParsedTicket] plus the e-ticket's own confirmation and warnings.
+ *
+ * Clears any PNR notice as it lands, so the two sources never stack their sentences on screen.
+ */
+private fun TrainEditorUiState.applying(ticket: ParsedTicket): TrainEditorUiState {
+    val count = ticket.passengers.size
+    val issuer = ticket.agentName.takeIf { it.isNotBlank() }?.let { "$it e-ticket" } ?: "e-ticket"
+    val summary = if (count == 0) {
+        "Filled in from the $issuer."
+    } else {
+        "Filled in from the $issuer — $count " + if (count == 1) "passenger." else "passengers."
+    }
+
+    return withParsedTicket(ticket).copy(
         isImporting = false,
         importError = null,
         importSummary = summary,
-        importWarnings = ticket.warnings
+        importWarnings = ticket.warnings,
+        pnrSummary = null,
+        pnrError = null
     )
 }
 

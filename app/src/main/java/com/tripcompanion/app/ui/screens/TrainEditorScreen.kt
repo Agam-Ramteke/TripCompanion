@@ -28,6 +28,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.UploadFile
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
@@ -93,16 +94,19 @@ import java.time.LocalTime
 private val TRAVEL_CLASSES = listOf("1A", "2A", "3A", "3E", "SL", "CC", "EC", "2S", "GN")
 
 /**
- * The three the railway records, as chips.
+ * The genders offered as chips.
  *
- * [PassengerGender.UNSPECIFIED] is deliberately not one of them: it is the state of having
- * nothing selected, and a chip reading "Not recorded" beside three real answers invites
- * someone to pick it as though it meant something.
+ * Only Male and Female are shown here. [PassengerGender.TRANSGENDER] is kept in the model —
+ * an IRCTC ticket can still carry it and it renders wherever a passenger's gender is shown —
+ * it is simply not offered as a choice in this editor.
+ *
+ * [PassengerGender.UNSPECIFIED] is left out for a different reason: it is the state of having
+ * nothing selected, and a chip for it beside real answers invites someone to pick it as
+ * though it meant something.
  */
 private val GENDERS = listOf(
     PassengerGender.MALE,
-    PassengerGender.FEMALE,
-    PassengerGender.TRANSGENDER
+    PassengerGender.FEMALE
 )
 
 /**
@@ -121,6 +125,7 @@ fun TrainEditorScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val metrics = AppThemeExtended.metrics
+    val colors = AppThemeExtended.colors
     val context = LocalContext.current
     val is24Hour = DateFormat.is24HourFormat(context)
 
@@ -311,6 +316,41 @@ fun TrainEditorScreen(
                     singleLine = true,
                     modifier = Modifier.width(120.dp)
                 )
+            }
+
+            // Live booking status by PNR. Shown only with a key configured — otherwise the
+            // fetch could only fail, so it is not offered rather than offered and greyed out.
+            // A PNR fills coach, berth and status but never names; the notice says so, in the
+            // same cards the e-ticket import uses so the two paths read alike.
+            if (state.isPnrLookupAvailable) {
+                SecondaryButton(
+                    text = if (state.isFetchingPnr) "Fetching…" else "Fetch booking status",
+                    onClick = viewModel::fetchPnr,
+                    enabled = state.canFetchPnr,
+                    icon = Icons.Default.Search
+                )
+
+                state.pnrError?.let { message ->
+                    ImportNotice(
+                        text = message,
+                        icon = Icons.Default.ErrorOutline,
+                        tint = colors.danger,
+                        background = colors.dangerSoft,
+                        textColor = colors.dangerText,
+                        onDismiss = viewModel::dismissPnrNotice
+                    )
+                }
+
+                state.pnrSummary?.let { message ->
+                    ImportNotice(
+                        text = message,
+                        icon = Icons.Default.CheckCircle,
+                        tint = colors.success,
+                        background = colors.successSoft,
+                        textColor = colors.successText,
+                        onDismiss = viewModel::dismissPnrNotice
+                    )
+                }
             }
 
             // ── The party ──────────────────────────────────────────────────────────

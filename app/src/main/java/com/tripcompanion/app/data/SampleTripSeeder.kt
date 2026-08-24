@@ -534,7 +534,7 @@ class SampleTripSeeder @Inject constructor(
      * Jaipur to Udaipur City, eleven halts.
      *
      * Origin arrival and terminus departure are left null, which is what
-     * [com.tripcompanion.app.data.network.IndianRailApiParser] produces from a real response:
+     * [com.tripcompanion.app.data.network.railradar.RailRadarParser] produces from a real response:
      * a train does not arrive at the station it starts from.
      */
     private fun outboundSchedule(): List<TrainStop> = listOf(
