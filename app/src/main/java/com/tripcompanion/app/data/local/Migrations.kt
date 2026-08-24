@@ -19,6 +19,8 @@ import androidx.sqlite.db.SupportSQLiteDatabase
  * 4 → 5  Made a booking cover a party: `train_passengers` replaces the single
  *        `coach`/`seat` pair on `trains`, which also gained the fields an IRCTC
  *        e-ticket carries.
+ * 5 → 6  Added `events.backgroundImageUri`: an optional photo the user picks for an
+ *        activity, shown behind its Home next-up card (§14).
  */
 object Migrations {
 
@@ -364,5 +366,18 @@ object Migrations {
         }
     }
 
-    val ALL = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+    /**
+     * An activity gains a photo for its Home card (§14, Task 3).
+     *
+     * The column is nullable and additive, so a plain `ALTER TABLE` is enough — no rebuild, and
+     * every existing event keeps its data and simply has no chosen background yet. Null is the
+     * honest value: a plan made before this feature never picked one.
+     */
+    val MIGRATION_5_6 = object : Migration(5, 6) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE events ADD COLUMN backgroundImageUri TEXT DEFAULT NULL")
+        }
+    }
+
+    val ALL = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
 }

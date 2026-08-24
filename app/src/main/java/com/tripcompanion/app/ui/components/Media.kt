@@ -66,8 +66,10 @@ private val PhotoScrim = Brush.verticalGradient(
  *
  * [blurRadius] frosts the picture so it reads as texture rather than a competing image behind the
  * text; the fade then only has to lift contrast the rest of the way, which is why it can be gentler
- * (and the photo more present) than an unblurred wash would allow. Blur is a real render effect on
- * API 31+ and a silent no-op below it — the fade alone still carries legibility there.
+ * (and the photo more present) than an unblurred wash would allow. The wash is deliberately light —
+ * a background the user chose for this card should read as their photograph, not a tinted panel —
+ * and only the lower portion stays opaque enough to seat the card's own dark text. Blur is a real
+ * render effect on API 31+ and a silent no-op below it — the fade alone still carries legibility there.
  *
  * Draw it with [Modifier.matchParentSize] inside a `Box` so the picture never decides the card's
  * height; the content does. Nothing is drawn at all when there is no picture, because a
@@ -96,9 +98,9 @@ fun PhotoBackdrop(
                 .fillMaxSize()
                 .background(
                     Brush.verticalGradient(
-                        0.0f to fadeColor.copy(alpha = 0.55f),
-                        0.55f to fadeColor.copy(alpha = 0.72f),
-                        1.0f to fadeColor.copy(alpha = 0.86f)
+                        0.0f to fadeColor.copy(alpha = 0.42f),
+                        0.55f to fadeColor.copy(alpha = 0.60f),
+                        1.0f to fadeColor.copy(alpha = 0.80f)
                     )
                 )
         )

@@ -28,6 +28,7 @@ data class EventEditorState(
     val locationName: String = "",
     val whatWeAreDoing: String = "",
     val notes: String = "",
+    val backgroundImageUri: String? = null,
     val status: EventStatus = EventStatus.UPCOMING,
     val isEditing: Boolean = false,
     val isSaving: Boolean = false,
@@ -91,6 +92,7 @@ class EventEditorViewModel @Inject constructor(
                             locationName = locName,
                             whatWeAreDoing = event.whatWeAreDoing,
                             notes = event.notes,
+                            backgroundImageUri = event.backgroundImageUri,
                             status = event.status,
                             isEditing = true,
                             createdAt = event.createdAt
@@ -184,6 +186,15 @@ class EventEditorViewModel @Inject constructor(
         _state.update { it.copy(locationId = null, locationName = "") }
     }
 
+    /** The photo the user picked for this activity's Home card; already copied into app storage. */
+    fun updateBackgroundImage(path: String) {
+        _state.update { it.copy(backgroundImageUri = path) }
+    }
+
+    fun clearBackgroundImage() {
+        _state.update { it.copy(backgroundImageUri = null) }
+    }
+
     fun save() {
         val s = _state.value
         if (s.title.isBlank()) {
@@ -218,6 +229,7 @@ class EventEditorViewModel @Inject constructor(
                 locationId = s.locationId,
                 whatWeAreDoing = s.whatWeAreDoing.trim(),
                 notes = s.notes.trim(),
+                backgroundImageUri = s.backgroundImageUri,
                 status = s.status,
                 order = order,
                 createdAt = s.createdAt ?: now,

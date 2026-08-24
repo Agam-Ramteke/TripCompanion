@@ -320,6 +320,48 @@ class MigrationTest {
             put("updatedAt", "2026-08-01T09:00:00")
         }
 
+    /**
+     * Seeds a version 5 database — the one that shipped before an activity could carry its own
+     * Home-card photo.
+     *
+     * One trip and one event is enough: 5 → 6 is a single additive column on `events`, so the
+     * fixture only has to prove an event that predates the column reads back afterwards with no
+     * background rather than an invented one. The event is given no location on purpose, so the
+     * seed needs no `locations` row to satisfy.
+     */
+    private fun seedVersion5(): SupportSQLiteDatabase = helper.createDatabase(TEST_DB, 5).apply {
+        insert(
+            "trips",
+            ContentValues().apply {
+                put("id", 1L)
+                put("name", "Udaipur, four days")
+                put("startDate", "2026-11-03")
+                put("endDate", "2026-11-06")
+                put("status", "PLANNING")
+                put("createdAt", "2026-08-01T09:00:00")
+                put("updatedAt", "2026-08-01T09:00:00")
+            }
+        )
+        insert(
+            "events",
+            ContentValues().apply {
+                put("id", 1L)
+                put("tripId", 1L)
+                put("type", "VISIT")
+                put("title", "Palace tour")
+                put("startTime", "2026-11-03T10:00:00")
+                put("endTime", "2026-11-03T13:00:00")
+                put("whatWeAreDoing", "Walk the courtyards, then the museum.")
+                put("notes", "Buy tickets at the north gate.")
+                put("status", "UPCOMING")
+                put("order", 0)
+                put("createdAt", "2026-08-01T09:00:00")
+                put("updatedAt", "2026-08-01T09:00:00")
+            }
+        )
+        close()
+    }
+
     private fun SupportSQLiteDatabase.insert(table: String, values: ContentValues) {
         val columns = values.keySet().joinToString(", ") { "`$it`" }
         val placeholders = values.keySet().joinToString(", ") { "?" }
@@ -947,6 +989,39 @@ class MigrationTest {
         )
     }
 
+    // ---- 5 → 6: an activity can carry its own Home-card photo ---------------
+
+    @Test
+    @Throws(IOException::class)
+    fun migrating5ToLatestProducesTheSchemaRoomExpects() {
+        seedVersion5()
+
+        // A plain additive `ALTER TABLE` still has to leave `events` matching the schema Room
+        // exports for version 6 — column for column. This is the assertion that it does.
+        migrateToCurrent()
+    }
+
+    /**
+     * An activity that predates the feature has no chosen background, and says so with null.
+     *
+     * A background is a deliberate choice the user makes on one activity; an event from before the
+     * column existed never made it. Null is the honest value — the Home card falls back to the
+     * place or trip photo — where any string would be a picture nobody picked.
+     */
+    @Test
+    @Throws(IOException::class)
+    fun anEventFromBeforeTheUpgradeHasNoCardBackground() = runBlocking {
+        seedVersion5()
+        migrateToCurrent()
+
+        val db = openAtCurrentVersion()
+        val event = db.eventDao().getEventsForTrip(1L).first().single()
+
+        assertEquals("Palace tour", event.title)
+        assertEquals("Buy tickets at the north gate.", event.notes)
+        assertNull("an upgraded event invented a card background", event.backgroundImageUri)
+    }
+
     private companion object {
         const val TEST_DB = "migration-test.db"
 
@@ -957,6 +1032,6 @@ class MigrationTest {
          * and every test in the file follows, instead of quietly continuing to validate against
          * a version that is no longer current.
          */
-        const val LATEST_VERSION = 5
+        const val LATEST_VERSION = 6
     }
 }

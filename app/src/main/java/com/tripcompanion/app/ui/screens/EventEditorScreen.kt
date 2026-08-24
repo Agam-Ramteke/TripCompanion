@@ -1,6 +1,11 @@
 package com.tripcompanion.app.ui.screens
 
+import android.net.Uri
 import android.text.format.DateFormat
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -20,12 +25,14 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AddLocation
+import androidx.compose.material.icons.filled.AddPhotoAlternate
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -48,9 +55,11 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextOverflow
@@ -58,10 +67,12 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.tripcompanion.app.core.util.DateTimeUtils
+import com.tripcompanion.app.data.local.ImageStorageHelper
 import com.tripcompanion.app.domain.model.EventType
 import com.tripcompanion.app.feature.event.EventEditorViewModel
 import com.tripcompanion.app.ui.components.AppCard
 import com.tripcompanion.app.ui.components.AppFilterChip
+import com.tripcompanion.app.ui.components.AppImage
 import com.tripcompanion.app.ui.components.PickerField
 import com.tripcompanion.app.ui.components.PrimaryButton
 import com.tripcompanion.app.ui.components.SectionHeader
@@ -70,6 +81,7 @@ import com.tripcompanion.app.ui.components.icon
 import com.tripcompanion.app.ui.components.label
 import com.tripcompanion.app.ui.theme.AppThemeExtended
 import java.time.LocalTime
+import kotlinx.coroutines.launch
 
 /**
  * Create or edit one activity (§3, §8, §9, §14).
@@ -103,6 +115,31 @@ fun EventEditorScreen(
     var editingDate by remember { mutableStateOf(false) }
     var editingStartTime by remember { mutableStateOf(false) }
     var editingEndTime by remember { mutableStateOf(false) }
+
+    // The card background is picked here and copied into app storage before the ViewModel ever
+    // sees it, so what it stores is always a durable `file://` path, never a transient content URI.
+    val scope = rememberCoroutineScope()
+    var isCopyingBackground by remember { mutableStateOf(false) }
+    var backgroundCopyFailed by remember { mutableStateOf(false) }
+
+    val backgroundPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            scope.launch {
+                isCopyingBackground = true
+                backgroundCopyFailed = false
+                try {
+                    val permanentPath = ImageStorageHelper.saveImageToInternalStorage(context, uri)
+                    viewModel.updateBackgroundImage(permanentPath)
+                } catch (_: Exception) {
+                    backgroundCopyFailed = true
+                } finally {
+                    isCopyingBackground = false
+                }
+            }
+        }
+    }
 
     LaunchedEffect(pickedLocationId) {
         val id = pickedLocationId ?: return@LaunchedEffect
@@ -292,6 +329,24 @@ fun EventEditorScreen(
                 maxLines = 5
             )
 
+            Spacer(Modifier.height(metrics.sectionGap - metrics.rowGap))
+            SectionHeader(
+                title = "Card background",
+                subtitle = "Optional. The photo shown behind this activity on the Home screen."
+            )
+
+            CardBackgroundPicker(
+                imageUri = state.backgroundImageUri,
+                isCopying = isCopyingBackground,
+                failed = backgroundCopyFailed,
+                onPick = {
+                    backgroundPickerLauncher.launch(
+                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                    )
+                },
+                onClear = viewModel::clearBackgroundImage
+            )
+
             // `sectionGap - rowGap`, not `sectionGap`: the Column already puts `rowGap`
             // between every child, so a full section gap here reads as 36dp of nothing
             // above the button.
@@ -439,6 +494,89 @@ private fun SelectedLocation(
                     modifier = Modifier.size(18.dp)
                 )
             }
+        }
+    }
+}
+
+/**
+ * The photo behind this activity on Home's next-up card (§14, Task 3).
+ *
+ * Deliberately one compact row, not the full-bleed picker the photo-ideas board uses: this is one
+ * option on a long form, not the point of the screen. Empty, it invites a pick; filled, it shows a
+ * thumbnail with a way to change (tap the row) or remove (the ✕). The chosen image is copied into
+ * app storage before it reaches the ViewModel, so the card still draws offline and a blank value
+ * simply falls back to the place or trip photo on Home.
+ */
+@Composable
+private fun CardBackgroundPicker(
+    imageUri: String?,
+    isCopying: Boolean,
+    failed: Boolean,
+    onPick: () -> Unit,
+    onClear: () -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        AppCard(onClick = onPick) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(52.dp)
+                        .clip(AppThemeExtended.metrics.imageShape)
+                        .background(AppThemeExtended.colors.accentSoft),
+                    contentAlignment = Alignment.Center
+                ) {
+                    when {
+                        isCopying -> CircularProgressIndicator(
+                            strokeWidth = 2.dp,
+                            color = AppThemeExtended.colors.accent,
+                            modifier = Modifier.size(22.dp)
+                        )
+                        !imageUri.isNullOrBlank() -> AppImage(
+                            uri = imageUri,
+                            contentDescription = null,
+                            modifier = Modifier.size(52.dp)
+                        )
+                        else -> Icon(
+                            Icons.Default.AddPhotoAlternate,
+                            contentDescription = null,
+                            tint = AppThemeExtended.colors.accent,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
+                }
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        text = if (imageUri.isNullOrBlank()) "Set a background photo" else "Change background photo",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = "Tap to pick a photo from your device.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                if (!imageUri.isNullOrBlank() && !isCopying) {
+                    IconButton(onClick = onClear) {
+                        Icon(
+                            Icons.Default.Close,
+                            contentDescription = "Remove the background photo",
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+            }
+        }
+        if (failed) {
+            Text(
+                text = "That image could not be copied into the app. Pick it again.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error
+            )
         }
     }
 }

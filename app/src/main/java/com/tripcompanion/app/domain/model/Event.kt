@@ -12,6 +12,11 @@ data class Event(
     val locationId: Long? = null,
     val whatWeAreDoing: String = "",
     val notes: String = "",
+    /**
+     * A photo the user chose to sit behind this activity on Home's next-up card (§14).
+     * Null means "no explicit choice" — the card then falls back to the place or trip photo.
+     */
+    val backgroundImageUri: String? = null,
     val status: EventStatus = EventStatus.UPCOMING,
     val order: Int = 0,
     val createdAt: LocalDateTime = LocalDateTime.now(),

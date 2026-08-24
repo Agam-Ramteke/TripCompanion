@@ -10,22 +10,22 @@ step) lives in [CURRENT_STATE.md](CURRENT_STATE.md); this file is the backlog ov
 
 ## 🔴 Current (active now)
 
-- [ ] **Task 3 — Activity-card background customization.** Let the user set the photo shown on the
-      Home next-up card for an activity, via a **compact** control in the event editor, and make that
-      photo **"slightly more transparent."** Full step-by-step plan in
-      [CURRENT_STATE.md](CURRENT_STATE.md) → *Next Steps*. Touches: `Event` (+ `backgroundImageUri`),
-      `EventEntity`, `EntityMappers`, Room `MIGRATION_5_6` (+ `6.json` + `MigrationTest`),
-      `EventEditorViewModel`/`State`, `EventEditorScreen` (picker), `HomeViewModel.nextUpImageUri`
-      (new field takes precedence), `PhotoBackdrop` fade alphas.
-  - [ ] **Resolve first:** Task 3(b) opacity direction is ambiguous (lighten wash vs. fainter photo)
-        — see [CURRENT_STATE.md](CURRENT_STATE.md) *Unresolved Questions*. A small nudge + screenshot
-        to confirm is acceptable.
+- [x] **Task 3 — Activity-card background customization — DONE & user-confirmed (2026-08-24).**
+      Added `Event.backgroundImageUri` end-to-end (domain → `EventEntity` → `EntityMappers` → Room
+      `MIGRATION_5_6` + exported `6.json` + `MigrationTest` 5→6 cases → `EventEditorViewModel`/State →
+      a **compact** "Card background" picker in `EventEditorScreen`). `HomeViewModel.nextUpImageUri`
+      now prefers it; `PhotoBackdrop` fade lightened (0.42/0.60/0.80) so the chosen photo shows
+      through. Opacity ambiguity resolved (lightened the wash). Unit tests + `assembleDebug` green;
+      committed on `main`.
+- [ ] **Await the user's pick** for the next feature (below): the **Map & location epic**, the new
+      **Stay check-in/check-out** feature, or the deferred **Back-navigation fix**.
 
 ## 🟠 Next (soon, after current)
 
-- [ ] **Commit the uncommitted work.** Nothing is committed since the initial commit `31c01a0`. The
-      RailRadar integration + photo backdrop + (then) Task 3 should be committed in coherent chunks.
-      Verify secrets stay out (`local.properties`, `docs/Trip/*.pdf` are git-ignored).
+- [x] **Commit the RailRadar + photo + docs work — DONE (2026-08-24).** Landed on `main` as 4
+      commits (tip `f247c3f`): RailRadar; photo backdrop + shadow fix; portrait lock; project docs.
+      Secrets confirmed git-ignored (`local.properties`, `docs/Trip/*.pdf`). `main` is ahead of
+      `origin/main` — **not pushed**. Task 3 will be its own commit(s) when it lands.
 - [ ] **Confirm the RailRadar API key.** Verify `rg_…` vs `rr_live_…` in the RailRadar dashboard;
       watch `logcat` for `401` on a live fetch. If rejected, re-issue. (See
       [API_CONTRACTS.md](API_CONTRACTS.md).)
@@ -63,13 +63,30 @@ with the user. Sub-items:
       `Intent` to Google Maps (`google.navigation:q=<lat>,<lon>` or `geo:` URI), with a chooser
       fallback if Maps isn't installed. No in-app turn-by-turn.
 
+## 🏨 Stay check-in / check-out (requested 2026-08-24 — "future but essential")
+
+A `STAY` activity currently uses the generic single **Date + Starts/Ends + "Ends the next day"**
+model (as seen in the "Add an activity → Stay" editor). The user wants stays to carry **two explicit
+datetime fields instead**:
+
+- [ ] **Check-in (date + time)** and **check-out (date + time)** fields, surfaced when Kind = Stay.
+- [ ] When the stay **spans multiple days**, the itinerary shows it as **two separate entries** — a
+      **check-in** item on the arrival day and a **check-out** item on the departure day (each on its
+      own day) — rather than one card that merely "ends the next day".
+- [ ] **Design to settle first:** store two datetimes (on `Event`/`StayDetails`) and derive two
+      itinerary rows at the grouping layer, *or* model two linked events. If persisted as new
+      columns → another Room migration (**v7**) + exported schema + `MigrationTest` case (no
+      destructive fallback — ADR-006). Keep the generic-engine principle: branch on
+      `event.type == STAY`, never a place name.
+
 ## 🐞 Bugs
 
-- [x] **Unwanted screen auto-rotation on app open — FIXED (applied, pending on-device verify).**
+- [x] **Unwanted screen auto-rotation on app open — FIXED & device-verified (2026-08-24).**
       Root cause: `MainActivity` in [AndroidManifest.xml](../app/src/main/AndroidManifest.xml) had
       **no `android:screenOrientation`**, so the app followed the device and rotated. Fix applied:
       added `android:screenOrientation="portrait"` to the `<activity>`. Nothing calls
-      `setRequestedOrientation` in code, so this is the complete cause. Takes effect on next build.
+      `setRequestedOrientation` in code, so this is the complete cause. **Verified on-device
+      2026-08-24:** with auto-rotate ON, forcing the display to landscape left the app portrait.
       Note: this locks the *whole* single-Activity app to portrait, including the map — revisit if
       the redesigned map should allow landscape. osmdroid's *map* rotation gestures in `OsmMap.kt` are
       unrelated (map orientation ≠ screen).
@@ -81,14 +98,20 @@ with the user. Sub-items:
 
 ## 🟡 Later (someday / not scheduled)
 
+- [ ] **Back-navigation to Home (requested 2026-08-24, "for later").** System **Back** should
+      navigate to the **Home** screen from anywhere, **except** the **Settings menu** and the
+      **activity editor**, where Back keeps its normal behaviour. Today Back just pops the last
+      screen. Touches back-stack handling in `AppNavHost`/`Routes` (single-Activity
+      Navigation-Compose). Confirm the exact set of "excepted" screens before building.
 - [ ] **Notifications / background refresh (WorkManager)** — spec future-work; no WorkManager dep yet
       ([ARCHITECTURE.md](ARCHITECTURE.md) → Background processing). Only add if a real need appears.
 - [ ] Broaden ticket import beyond IRCTC format if other formats are needed.
 
 ## 🧹 Technical debt / cleanups
 
-- [ ] **Migration test coverage** must extend to 5→6 when Task 3 lands (policy: no destructive
-      fallback — ADR-006).
+- [x] **Migration test coverage 5→6 — DONE (Task 3).** `MigrationTest` has `LATEST_VERSION = 6`, a
+      `seedVersion5()` helper, and two 5→6 cases (schema validates; an upgraded event has a null
+      `backgroundImageUri`). Instrumented — run on a device to execute.
 - [ ] Confirm `Converters` stored representation for `LocalDateTime` is documented somewhere durable
       (currently `UNVERIFIED` in [ARCHITECTURE.md](ARCHITECTURE.md)).
 - [ ] The implemented Room schema is a pragmatic subset of spec §18 (no `Traveler`/`Task` tables);

@@ -300,10 +300,12 @@ class HomeViewModel @Inject constructor(
     /**
      * The picture behind Home's next-up card, or null when this plan has none.
      *
-     * A chain rather than one column, because a single card stands in for four kinds of plan and
-     * each keeps its picture somewhere else: a stay's is the room, a visit's is the place, and an
-     * activity the user has planned a shot for has the reference photo they saved. The trip cover
-     * is the last resort — no longer a picture of *this* activity, but still one of this trip.
+     * A chain rather than one column. First an explicit choice — a background the user set on the
+     * activity itself — which outranks everything derived, because they picked it precisely to be
+     * this card's face. Failing that, a single card stands in for four kinds of plan and each keeps
+     * its picture somewhere else: a stay's is the room, a visit's is the place, and an activity the
+     * user has planned a shot for has the reference photo they saved. The trip cover is the last
+     * resort — no longer a picture of *this* activity, but still one of this trip.
      *
      * A stay asks its own paperwork before the place, so the backdrop is the same photograph the
      * stay card already shows for that booking rather than a second opinion about it.
@@ -314,6 +316,7 @@ class HomeViewModel @Inject constructor(
      */
     private suspend fun nextUpImageUri(event: Event?, place: Location?, trip: Trip?): String? {
         if (event == null) return null
+        event.backgroundImageUri?.usable()?.let { return it }
         if (event.type == EventType.STAY) {
             stayDetailsRepository.getForEventOnce(event.id)?.photoUri?.usable()?.let { return it }
         }

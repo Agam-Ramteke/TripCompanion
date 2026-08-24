@@ -31,3 +31,6 @@ tmp_pdf/
 
 # Device screenshots taken during manual walkthroughs.
 device-shots/
+
+# Scratch dir for on-device verification screenshots (see .claude/rules/testing-and-verify.md).
+.verify/

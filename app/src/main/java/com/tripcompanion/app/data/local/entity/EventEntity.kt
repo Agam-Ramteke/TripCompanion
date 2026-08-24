@@ -31,6 +31,7 @@ data class EventEntity(
     val locationId: Long? = null,
     val whatWeAreDoing: String = "",
     val notes: String = "",
+    val backgroundImageUri: String? = null,
     val status: String = EventStatus.UPCOMING.name,
     val order: Int = 0,
     val createdAt: LocalDateTime = LocalDateTime.now(),
