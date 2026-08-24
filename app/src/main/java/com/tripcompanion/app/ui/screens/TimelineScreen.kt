@@ -40,6 +40,7 @@ import com.tripcompanion.app.domain.model.Location
 import com.tripcompanion.app.domain.model.StayDetails
 import com.tripcompanion.app.domain.model.Train
 import com.tripcompanion.app.feature.trip.TimelineDay
+import com.tripcompanion.app.feature.trip.TimelineDayEvent
 import com.tripcompanion.app.feature.trip.TimelineUiState
 import com.tripcompanion.app.feature.trip.TimelineViewModel
 import com.tripcompanion.app.ui.components.AppCard
@@ -162,21 +163,22 @@ fun TimelineScreen(
         // vertical arrangement would put a gap in it between every stop.
         item("rail") {
             Column(Modifier.padding(horizontal = metrics.screenPadding)) {
-                state.dayEvents.forEachIndexed { index, event ->
+                state.dayEvents.forEachIndexed { index, item ->
                     TimelineItem(
-                        time = DateTimeUtils.formatTime(event.startTime),
-                        type = event.type,
-                        status = event.status,
+                        time = DateTimeUtils.formatTime(item.displayTime),
+                        type = item.event.type,
+                        status = item.event.status,
                         isFirst = index == 0,
                         isLast = index == state.dayEvents.lastIndex
                     ) {
-                        val train = state.trains[event.id]
+                        val train = state.trains[item.event.id]
                         ItineraryStop(
-                            event = event,
-                            place = event.locationId?.let { state.places[it] },
-                            stayDetails = state.stayDetails[event.id],
+                            dayEvent = item,
+                            event = item.event,
+                            place = item.event.locationId?.let { state.places[it] },
+                            stayDetails = state.stayDetails[item.event.id],
                             train = train,
-                            isCurrent = event.id == state.currentEventId,
+                            isCurrent = item.event.id == state.currentEventId,
                             now = state.now,
                             // A ticket-shaped card opens the ticket. Everything else opens the
                             // activity it is.
@@ -184,7 +186,7 @@ fun TimelineScreen(
                                 if (train != null) {
                                     onNavigateToTrainDetail(train.id)
                                 } else {
-                                    onNavigateToEventDetail(event.id)
+                                    onNavigateToEventDetail(item.event.id)
                                 }
                             },
                             onEdit = {
@@ -194,12 +196,12 @@ fun TimelineScreen(
                                 if (train != null) {
                                     onNavigateToEditTrain(train.tripId, train.id)
                                 } else {
-                                    onNavigateToEditEvent(trip.id, event.id)
+                                    onNavigateToEditEvent(trip.id, item.event.id)
                                 }
                             },
-                            onDone = { viewModel.completeEvent(event) },
-                            onSkip = { viewModel.skipEvent(event) },
-                            onReopen = { viewModel.reopenEvent(event) }
+                            onDone = { viewModel.completeEvent(item.event) },
+                            onSkip = { viewModel.skipEvent(item.event) },
+                            onReopen = { viewModel.reopenEvent(item.event) }
                         )
                     }
                 }
@@ -248,95 +250,90 @@ private fun ItineraryHeader(
                 icon = Icons.Default.Map,
                 contentDescription = "Trip map",
                 onClick = onMap,
-                size = 44.dp
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            Spacer(Modifier.width(8.dp))
             AppIconButton(
                 icon = Icons.Default.Add,
-                contentDescription = "Add an activity",
+                contentDescription = "Add activity",
                 onClick = onAdd,
-                tint = MaterialTheme.colorScheme.onPrimary,
-                background = MaterialTheme.colorScheme.primary,
-                borderColor = null,
-                size = 44.dp
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
+
         if (state.hasEvents) {
             Spacer(Modifier.height(14.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = "${state.completedEventCount} of ${state.totalEventCount} done " +
-                        "across the trip",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.weight(1f)
-                )
-                // One control, and its label says what tapping it does. When completed items
-                // are hidden it also carries the count, so nothing on the day is silently gone.
-                if (!state.showCompleted) {
-                    TextActionButton(
-                        text = if (state.hiddenCompletedCount > 0) {
-                            "Show ${state.hiddenCompletedCount} done"
-                        } else {
-                            "Show done"
-                        },
-                        onClick = { onToggleCompleted(true) }
-                    )
-                } else if (state.completedEventCount > 0) {
-                    TextActionButton(
-                        text = "Hide done",
-                        onClick = { onToggleCompleted(false) }
-                    )
-                }
-            }
-            Spacer(Modifier.height(8.dp))
             AppProgressBar(
                 fraction = state.progressFraction,
                 color = AppThemeExtended.colors.success
             )
+            Spacer(Modifier.height(8.dp))
+            Row(
+                modifier = Modifier.padding(horizontal = 2.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "${state.completedEventCount} of ${state.totalEventCount} done",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f)
+                )
+                TextActionButton(
+                    text = if (state.showCompleted) "Hide done" else "Show done",
+                    onClick = { onToggleCompleted(!state.showCompleted) }
+                )
+            }
         }
     }
 }
 
-/** A finished day still needs to say so, rather than reading as a day nobody planned. */
+/**
+ * The placeholder when every event on this day is completed and the user has chosen to hide
+ * completed events. A day with completed items is not "empty" in the same sense as an un-planned
+ * day, so it gets its own wording and a one-tap way to show them again.
+ */
 @Composable
-private fun AllDoneCard(hiddenCount: Int, onShowCompleted: () -> Unit) {
+private fun AllDoneCard(
+    hiddenCount: Int,
+    onShowCompleted: () -> Unit
+) {
     AppCard {
-        Text(
-            text = "Everything on this day is done",
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onSurface
-        )
-        Spacer(Modifier.height(4.dp))
-        Text(
-            text = if (hiddenCount == 1) {
-                "One completed activity is hidden while \"Show completed\" is off."
-            } else {
-                "$hiddenCount completed activities are hidden while \"Show completed\" is off."
-            },
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Spacer(Modifier.height(14.dp))
-        SecondaryButton(text = "Show them", onClick = onShowCompleted)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                Icons.Default.CheckCircle,
+                contentDescription = null,
+                tint = AppThemeExtended.colors.success,
+                modifier = Modifier.size(24.dp)
+            )
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    text = "All caught up for this day",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = "$hiddenCount completed ${if (hiddenCount == 1) "stop" else "stops"} hidden",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            TextActionButton(text = "Show", onClick = onShowCompleted)
+        }
     }
 }
 
 /**
  * One stop on the rail.
  *
- * A stay and a booked journey are drawn as the same cards their own screens draw, because a
- * booking should not look like two different things depending on which screen you reached it from
- * (§4) — the paperwork that makes a stay a stay is the photograph, the address and the two times,
- * and what makes a journey a journey is the two stations, the class and the berths. None of it
- * fits the activity card. Everything else is the activity card: "what we're doing" sits under the
- * title in full (§14) rather than truncated to a line, because it is the reason the entry exists
- * and a plan you cannot read is not a plan.
- *
- * Whichever card is drawn, the three verbs underneath are the same ones.
+ * Drawn three ways depending on what is behind it:
+ * - A journey with a booking behind it is drawn as a [TrainCard] — the ticket layout is the
+ *   natural shape for a train, and drawing it as an activity would drop the seat and coach.
+ * - A stay is drawn as a [HotelCard] — media-led, with room photo, address and check-in/out stamps.
+ * - Everything else is drawn as an activity card with eyebrow, title, time range and place name.
  */
 @Composable
 private fun ItineraryStop(
+    dayEvent: TimelineDayEvent,
     event: Event,
     place: Location?,
     stayDetails: StayDetails?,
@@ -358,6 +355,13 @@ private fun ItineraryStop(
         // The Trains screen's shape: a card this dense cannot host a button row, so the verbs go
         // directly beneath it rather than being crammed into the card.
         Column(Modifier.padding(bottom = 4.dp)) {
+            val dateLabel = when {
+                dayEvent.isTrainArrival -> "Arrives " + DateTimeUtils.formatTime(train.arrivalTime)
+                train.arrivalTime.toLocalDate() != train.departureTime.toLocalDate() ->
+                    "Arrives " + DateTimeUtils.formatShortDate(train.arrivalTime.toLocalDate())
+                else -> null
+            }
+
             TrainCard(
                 trainNumber = train.number,
                 trainName = trainDisplayName(train),
@@ -367,15 +371,15 @@ private fun ItineraryStop(
                 destinationTime = DateTimeUtils.formatTime(train.arrivalTime),
                 // The rail already carries the day, so the date is only worth the line when the
                 // train lands on a different one — which the two times alone would hide.
-                dateLabel = train.arrivalTime.toLocalDate()
-                    .takeIf { it != train.departureTime.toLocalDate() }
-                    ?.let { "Arrives " + DateTimeUtils.formatShortDate(it) },
+                dateLabel = dateLabel,
                 duration = DateTimeUtils.formatDuration(train.departureTime, train.arrivalTime),
                 seatSummary = train.bookingSummary(),
                 // Same rule as a stay: a journey the user has ruled on says so, otherwise the
                 // badge is the booking's own — which is what the Trains screen shows for it.
                 statusLabel = if (event.isDecided) {
                     statusLabel(event.status)
+                } else if (dayEvent.isTrainArrival) {
+                    "Arriving"
                 } else {
                     trainStatusLabel(train, now)
                 },
@@ -412,6 +416,21 @@ private fun ItineraryStop(
         // The Trains screen's shape: a media-led card cannot host a button row, so the verbs
         // go directly beneath it rather than being crammed into the card.
         Column(Modifier.padding(bottom = 4.dp)) {
+            val stayBadge = if (event.isDecided) {
+                statusLabel(event.status)
+            } else if (dayEvent.isCheckIn) {
+                "Check-in"
+            } else if (dayEvent.isCheckOut) {
+                "Check-out"
+            } else {
+                stayStatusLabel(event, now)
+            }
+            val stayTone = if (event.isDecided) {
+                statusTone(event.status)
+            } else {
+                stayStatusTone(event, now)
+            }
+
             HotelCard(
                 name = event.title,
                 imageUri = stayImageUri(stayDetails, place),
@@ -421,16 +440,8 @@ private fun ItineraryStop(
                 nightsLabel = stayNightsLabel(stayNights(event)),
                 // A stay the user has ruled on says so; otherwise the badge is where the stay
                 // is in time, which is what the Stay screen shows for the same booking.
-                statusLabel = if (event.isDecided) {
-                    statusLabel(event.status)
-                } else {
-                    stayStatusLabel(event, now)
-                },
-                statusTone = if (event.isDecided) {
-                    statusTone(event.status)
-                } else {
-                    stayStatusTone(event, now)
-                },
+                statusLabel = stayBadge,
+                statusTone = stayTone,
                 borderColor = borderColor,
                 borderWidth = borderWidth,
                 onClick = onOpen

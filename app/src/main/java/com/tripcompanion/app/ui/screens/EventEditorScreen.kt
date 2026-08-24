@@ -112,7 +112,8 @@ fun EventEditorScreen(
     val context = LocalContext.current
     val is24Hour = DateFormat.is24HourFormat(context)
 
-    var editingDate by remember { mutableStateOf(false) }
+    var editingStartDate by remember { mutableStateOf(false) }
+    var editingEndDate by remember { mutableStateOf(false) }
     var editingStartTime by remember { mutableStateOf(false) }
     var editingEndTime by remember { mutableStateOf(false) }
 
@@ -214,7 +215,7 @@ fun EventEditorScreen(
                 value = state.title,
                 onValueChange = viewModel::updateTitle,
                 label = { Text("Title") },
-                placeholder = { Text("What is this?") },
+                placeholder = { Text(if (state.type == EventType.STAY) "Hotel or property name" else "What is this?") },
                 shape = metrics.controlShape,
                 isError = state.validationError != null && state.title.isBlank(),
                 modifier = Modifier.fillMaxWidth(),
@@ -223,39 +224,92 @@ fun EventEditorScreen(
             )
 
             Spacer(Modifier.height(metrics.sectionGap - metrics.rowGap))
-            SectionHeader(title = "When")
 
-            // §9: date, start and end are three separate controls. One combined
-            // date-time picker makes the common edit — nudging a start time by fifteen
-            // minutes — pass through a date the user did not want to touch.
-            PickerField(
-                label = "Date",
-                value = DateTimeUtils.formatFullDate(state.eventDate),
-                icon = Icons.Default.CalendarToday,
-                onClick = { editingDate = true }
-            )
-
-            Row(horizontalArrangement = Arrangement.spacedBy(metrics.rowGap)) {
-                PickerField(
-                    label = "Starts",
-                    value = DateTimeUtils.formatTime(state.startTime),
-                    icon = Icons.Default.Schedule,
-                    onClick = { editingStartTime = true },
-                    modifier = Modifier.weight(1f)
+            if (state.type == EventType.STAY) {
+                SectionHeader(
+                    title = "Check-in & Check-out",
+                    subtitle = "When you arrive and depart. A multi-day stay appears on both days."
                 )
+
+                Text(
+                    text = "Check-in",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(metrics.rowGap)) {
+                    PickerField(
+                        label = "Date",
+                        value = DateTimeUtils.formatFullDate(state.startDate),
+                        icon = Icons.Default.CalendarToday,
+                        onClick = { editingStartDate = true },
+                        modifier = Modifier.weight(1.3f)
+                    )
+                    PickerField(
+                        label = "Time",
+                        value = DateTimeUtils.formatTime(state.startTime),
+                        icon = Icons.Default.Schedule,
+                        onClick = { editingStartTime = true },
+                        modifier = Modifier.weight(0.7f)
+                    )
+                }
+
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = "Check-out",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(metrics.rowGap)) {
+                    PickerField(
+                        label = "Date",
+                        value = DateTimeUtils.formatFullDate(state.endDate),
+                        icon = Icons.Default.CalendarToday,
+                        onClick = { editingEndDate = true },
+                        modifier = Modifier.weight(1.3f)
+                    )
+                    PickerField(
+                        label = "Time",
+                        value = DateTimeUtils.formatTime(state.endTime),
+                        icon = Icons.Default.Schedule,
+                        onClick = { editingEndTime = true },
+                        modifier = Modifier.weight(0.7f)
+                    )
+                }
+            } else {
+                SectionHeader(title = "When")
+
+                // §9: date, start and end are three separate controls. One combined
+                // date-time picker makes the common edit — nudging a start time by fifteen
+                // minutes — pass through a date the user did not want to touch.
                 PickerField(
-                    label = "Ends",
-                    value = DateTimeUtils.formatTime(state.endTime),
-                    icon = Icons.Default.Schedule,
-                    onClick = { editingEndTime = true },
-                    modifier = Modifier.weight(1f)
+                    label = "Date",
+                    value = DateTimeUtils.formatFullDate(state.startDate),
+                    icon = Icons.Default.CalendarToday,
+                    onClick = { editingStartDate = true }
+                )
+
+                Row(horizontalArrangement = Arrangement.spacedBy(metrics.rowGap)) {
+                    PickerField(
+                        label = "Starts",
+                        value = DateTimeUtils.formatTime(state.startTime),
+                        icon = Icons.Default.Schedule,
+                        onClick = { editingStartTime = true },
+                        modifier = Modifier.weight(1f)
+                    )
+                    PickerField(
+                        label = "Ends",
+                        value = DateTimeUtils.formatTime(state.endTime),
+                        icon = Icons.Default.Schedule,
+                        onClick = { editingEndTime = true },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+
+                OvernightToggle(
+                    checked = state.isOvernight,
+                    onCheckedChange = viewModel::toggleOvernight
                 )
             }
-
-            OvernightToggle(
-                checked = state.isOvernight,
-                onCheckedChange = viewModel::toggleOvernight
-            )
 
             // The range as it will be stored, including the +1 day suffix. §9 requires an
             // overnight event to carry an explicit end date, and this is where the user
@@ -310,7 +364,7 @@ fun EventEditorScreen(
                 value = state.whatWeAreDoing,
                 onValueChange = viewModel::updateWhatWeAreDoing,
                 placeholder = {
-                    Text("Walk the courtyards, find the best view, stay for the light.")
+                    Text(if (state.type == EventType.STAY) "Check in, drop bags, room number, hotel amenities." else "Walk the courtyards, find the best view, stay for the light.")
                 },
                 shape = metrics.controlShape,
                 modifier = Modifier.fillMaxWidth(),
@@ -365,25 +419,50 @@ fun EventEditorScreen(
         }
     }
 
-    if (editingDate) {
+    if (editingStartDate) {
         val pickerState = rememberDatePickerState(
-            initialSelectedDateMillis = DateTimeUtils.localDateToEpochMillis(state.eventDate)
+            initialSelectedDateMillis = DateTimeUtils.localDateToEpochMillis(state.startDate)
         )
         DatePickerDialog(
-            onDismissRequest = { editingDate = false },
+            onDismissRequest = { editingStartDate = false },
             shape = metrics.cardShape,
             confirmButton = {
                 TextButton(
                     onClick = {
                         pickerState.selectedDateMillis?.let {
-                            viewModel.updateEventDate(DateTimeUtils.epochMillisToLocalDate(it))
+                            viewModel.updateStartDate(DateTimeUtils.epochMillisToLocalDate(it))
                         }
-                        editingDate = false
+                        editingStartDate = false
                     }
                 ) { Text("Set") }
             },
             dismissButton = {
-                TextButton(onClick = { editingDate = false }) { Text("Cancel") }
+                TextButton(onClick = { editingStartDate = false }) { Text("Cancel") }
+            }
+        ) {
+            DatePicker(state = pickerState)
+        }
+    }
+
+    if (editingEndDate) {
+        val pickerState = rememberDatePickerState(
+            initialSelectedDateMillis = DateTimeUtils.localDateToEpochMillis(state.endDate)
+        )
+        DatePickerDialog(
+            onDismissRequest = { editingEndDate = false },
+            shape = metrics.cardShape,
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        pickerState.selectedDateMillis?.let {
+                            viewModel.updateEndDate(DateTimeUtils.epochMillisToLocalDate(it))
+                        }
+                        editingEndDate = false
+                    }
+                ) { Text("Set") }
+            },
+            dismissButton = {
+                TextButton(onClick = { editingEndDate = false }) { Text("Cancel") }
             }
         ) {
             DatePicker(state = pickerState)

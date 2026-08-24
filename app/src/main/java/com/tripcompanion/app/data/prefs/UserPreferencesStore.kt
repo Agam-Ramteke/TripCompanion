@@ -12,6 +12,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.catch
@@ -54,44 +55,55 @@ private val Context.userPreferencesDataStore: DataStore<Preferences> by
  * needed before Compose starts while these are needed only once a screen asks.
  */
 @Singleton
-class UserPreferencesStore @Inject constructor(
-    @ApplicationContext private val context: Context
+open class UserPreferencesStore(
+    private val context: Context?,
+    @Suppress("UNUSED_PARAMETER") forTesting: Boolean
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
-    val preferences: StateFlow<UserPreferences> = context.userPreferencesDataStore.data
-        // An unreadable preferences file must not stop the app drawing; defaults stand in
-        // and the next write repairs it. Same contract as the theme store.
-        .catch { cause ->
-            if (cause is IOException) emit(emptyPreferences()) else throw cause
-        }
-        .map { prefs ->
-            UserPreferences(
-                travellerName = prefs[KEY_NAME].orEmpty(),
-                homeCity = prefs[KEY_HOME_CITY].orEmpty(),
-                showCompletedActivities = prefs[KEY_SHOW_COMPLETED] ?: true,
-                keepScreenOnDuringJourney = prefs[KEY_KEEP_AWAKE] ?: false,
-                autoRefreshLiveStatus = prefs[KEY_AUTO_REFRESH] ?: true
-            )
-        }
-        .stateIn(scope, SharingStarted.Eagerly, UserPreferences())
+    @Inject
+    constructor(@ApplicationContext context: Context) : this(context, false)
 
-    fun setTravellerName(name: String) = putString(KEY_NAME, name.trim())
+    /** For test subclasses that override all flows and methods without touching DataStore. */
+    constructor() : this(null, true)
 
-    fun setHomeCity(city: String) = putString(KEY_HOME_CITY, city.trim())
+    open val preferences: StateFlow<UserPreferences> = if (context != null) {
+        context.userPreferencesDataStore.data
+            .catch { cause ->
+                if (cause is IOException) emit(emptyPreferences()) else throw cause
+            }
+            .map { prefs ->
+                UserPreferences(
+                    travellerName = prefs[KEY_NAME].orEmpty(),
+                    homeCity = prefs[KEY_HOME_CITY].orEmpty(),
+                    showCompletedActivities = prefs[KEY_SHOW_COMPLETED] ?: true,
+                    keepScreenOnDuringJourney = prefs[KEY_KEEP_AWAKE] ?: false,
+                    autoRefreshLiveStatus = prefs[KEY_AUTO_REFRESH] ?: true
+                )
+            }
+            .stateIn(scope, SharingStarted.Eagerly, UserPreferences())
+    } else {
+        MutableStateFlow(UserPreferences())
+    }
 
-    fun setShowCompletedActivities(show: Boolean) = putBoolean(KEY_SHOW_COMPLETED, show)
+    open fun setTravellerName(name: String) = putString(KEY_NAME, name.trim())
 
-    fun setKeepScreenOnDuringJourney(keep: Boolean) = putBoolean(KEY_KEEP_AWAKE, keep)
+    open fun setHomeCity(city: String) = putString(KEY_HOME_CITY, city.trim())
 
-    fun setAutoRefreshLiveStatus(refresh: Boolean) = putBoolean(KEY_AUTO_REFRESH, refresh)
+    open fun setShowCompletedActivities(show: Boolean) = putBoolean(KEY_SHOW_COMPLETED, show)
+
+    open fun setKeepScreenOnDuringJourney(keep: Boolean) = putBoolean(KEY_KEEP_AWAKE, keep)
+
+    open fun setAutoRefreshLiveStatus(refresh: Boolean) = putBoolean(KEY_AUTO_REFRESH, refresh)
 
     private fun putString(key: Preferences.Key<String>, value: String) {
-        scope.launch { context.userPreferencesDataStore.edit { it[key] = value } }
+        val ctx = context ?: return
+        scope.launch { ctx.userPreferencesDataStore.edit { it[key] = value } }
     }
 
     private fun putBoolean(key: Preferences.Key<Boolean>, value: Boolean) {
-        scope.launch { context.userPreferencesDataStore.edit { it[key] = value } }
+        val ctx = context ?: return
+        scope.launch { ctx.userPreferencesDataStore.edit { it[key] = value } }
     }
 
     private companion object {

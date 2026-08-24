@@ -2,8 +2,11 @@ package com.tripcompanion.app.domain.service
 
 import com.tripcompanion.app.domain.model.Event
 import com.tripcompanion.app.domain.model.EventType
+import com.tripcompanion.app.domain.model.Location
+import com.tripcompanion.app.domain.model.SearchResultLocation
 import com.tripcompanion.app.domain.model.Train
 import com.tripcompanion.app.domain.repository.EventRepository
+import com.tripcompanion.app.domain.repository.LocationRepository
 import com.tripcompanion.app.domain.repository.TrainRepository
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
@@ -28,21 +31,21 @@ import javax.inject.Singleton
  * - **The title only follows while nobody has retyped it.** It is rewritten when it is blank or
  *   still equals what this class generated from the booking as it stood before the edit; a title
  *   the user typed is theirs and survives every later save.
+ * - **Station location is auto-attached.** Adding a train searches and attaches its origin / boarding
+ *   station as a [Location] on the journey event, putting it on the itinerary and map.
  * - **"What we're doing" is never written at all**, not even on creation. It is the one field on
  *   the event that is prose, it would go stale the moment the booking changed, and the itinerary
  *   draws the live ticket card above it anyway.
  * - **Deleting a train leaves its event alone.** [Train.eventId] is deliberately not a foreign
  *   key: the ticket and the plan are two records, and cancelling a booking does not cancel the
  *   need to get there.
- *
- * A concrete class rather than an interface, unlike its neighbours in this package: there is no
- * platform boundary here to keep out of the domain — only repositories — so a second
- * implementation would be dead weight and the test can use the real one.
  */
 @Singleton
 class JourneyEventLinker @Inject constructor(
     private val eventRepository: EventRepository,
-    private val trainRepository: TrainRepository
+    private val trainRepository: TrainRepository,
+    private val locationRepository: LocationRepository? = null,
+    private val locationSearchService: LocationSearchService? = null
 ) {
 
     private val backfillLock = Mutex()
@@ -59,13 +62,18 @@ class JourneyEventLinker @Inject constructor(
      * already on it rather than needing a second write.
      */
     suspend fun syncEvent(train: Train, previous: Train?): Long {
+        val stationName = train.boardingPointName.ifBlank { train.originName }.trim()
+        val stationLocationId = resolveStationLocation(stationName)
+
         val linked = train.eventId?.let { eventRepository.getEventById(it).first() }
         if (linked != null) {
+            val locId = linked.locationId ?: stationLocationId
             eventRepository.updateEvent(
                 linked.copy(
                     title = retitle(linked.title, train, previous),
                     startTime = train.departureTime,
-                    endTime = train.arrivalTime
+                    endTime = train.arrivalTime,
+                    locationId = locId
                 )
             )
             return linked.id
@@ -75,10 +83,15 @@ class JourneyEventLinker @Inject constructor(
         // Both mean the same thing here: find the row this journey belongs in, or make one.
         val adopted = adoptable(train)
         if (adopted != null) {
+            val locId = adopted.locationId ?: stationLocationId
             // The title is left exactly as it is. An event this class did not create was written
             // by the user, and matching it to a ticket is not licence to rename it.
             eventRepository.updateEvent(
-                adopted.copy(startTime = train.departureTime, endTime = train.arrivalTime)
+                adopted.copy(
+                    startTime = train.departureTime,
+                    endTime = train.arrivalTime,
+                    locationId = locId
+                )
             )
             return adopted.id
         }
@@ -90,9 +103,69 @@ class JourneyEventLinker @Inject constructor(
                 title = journeyTitle(train),
                 startTime = train.departureTime,
                 endTime = train.arrivalTime,
+                locationId = stationLocationId,
                 order = eventRepository.getNextOrder(train.tripId)
             )
         )
+    }
+
+    /**
+     * Resolves or creates a [Location] for the station name, searching online if available.
+     */
+    private suspend fun resolveStationLocation(stationName: String): Long? {
+        if (stationName.isBlank() || locationRepository == null) return null
+        return try {
+            val existing = locationRepository.getAllLocations().first()
+            val match = existing.firstOrNull {
+                it.name.equals(stationName, ignoreCase = true) ||
+                    it.name.startsWith(stationName, ignoreCase = true)
+            }
+            if (match != null) return match.id
+
+            val place: SearchResultLocation? = locationSearchService?.let { searchService ->
+                val query = if (stationName.contains("station", ignoreCase = true)) {
+                    stationName
+                } else {
+                    "$stationName Railway Station"
+                }
+                when (val outcome = searchService.searchPlaces(query)) {
+                    is LocationSearchOutcome.Results -> outcome.places.firstOrNull()
+                    else -> null
+                }
+            }
+
+            if (place != null) {
+                locationRepository.insertLocation(
+                    Location(
+                        name = stationName,
+                        address = place.formattedAddress,
+                        latitude = place.latitude,
+                        longitude = place.longitude,
+                        category = "Transit",
+                        providerPlaceId = place.providerPlaceId,
+                        providerName = place.providerName
+                    )
+                )
+            } else {
+                locationRepository.insertLocation(
+                    Location(
+                        name = stationName,
+                        category = "Transit"
+                    )
+                )
+            }
+        } catch (_: Exception) {
+            try {
+                locationRepository.insertLocation(
+                    Location(
+                        name = stationName,
+                        category = "Transit"
+                    )
+                )
+            } catch (_: Exception) {
+                null
+            }
+        }
     }
 
     /**

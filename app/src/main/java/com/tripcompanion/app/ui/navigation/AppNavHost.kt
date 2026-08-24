@@ -1,5 +1,6 @@
 package com.tripcompanion.app.ui.navigation
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -67,7 +68,10 @@ private data class BottomTab(
     val label: String,
     val icon: ImageVector,
     val selectedIcon: ImageVector
-)
+) {
+    /** Pattern matching base path (e.g. "timeline" for "timeline?tripId={tripId}"). */
+    val baseRoute: String get() = route.substringBefore('?').substringBefore('/')
+}
 
 /**
  * The five places the bottom bar goes.
@@ -94,9 +98,8 @@ private val BottomTabs = listOf(
  * The bar appears on exactly the five tab roots and nowhere else: everything deeper is pushed
  * and carries its own back button, so a detail screen is never half-tab and half-page.
  *
- * The `Scaffold`'s padding is applied to the `NavHost` rather than screen by screen. That is
- * what keeps every screen clear of the status bar and the system gesture area with one line
- * instead of nineteen — and it means a new screen is inset-safe the moment it is added.
+ * Back-navigation: System Back returns to Home from anywhere in the app, EXCEPT Settings, the
+ * activity editor (and its sub-pickers), and Home itself (which exits the app).
  */
 @Composable
 fun AppNavHost() {
@@ -104,6 +107,21 @@ fun AppNavHost() {
     val currentBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = currentBackStackEntry?.destination?.route
     val showBottomBar = BottomTabs.any { it.route == currentRoute }
+
+    // System Back returns to Home from anywhere, EXCEPT Settings, the activity editor, and sub-pickers
+    val isExceptedRoute = currentRoute in listOf(
+        Routes.Settings.route,
+        Routes.EventEditor.route,
+        Routes.LocationPicker.route,
+        Routes.PhotoEditor.route
+    )
+    val shouldInterceptBackToHome = currentRoute != null &&
+        currentRoute != Routes.Home.route &&
+        !isExceptedRoute
+
+    BackHandler(enabled = shouldInterceptBackToHome) {
+        navController.navigateToTopLevel(Routes.Home.route)
+    }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
