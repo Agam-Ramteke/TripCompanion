@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.tripcompanion.app.core.time.TimeProvider
 import com.tripcompanion.app.domain.model.Train
 import com.tripcompanion.app.domain.model.Trip
+import com.tripcompanion.app.domain.repository.EventRepository
 import com.tripcompanion.app.domain.repository.TrainRepository
 import com.tripcompanion.app.domain.repository.TripRepository
 import com.tripcompanion.app.domain.service.TrainStatusService
@@ -13,6 +14,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.time.LocalDateTime
@@ -77,9 +79,10 @@ data class TrainsUiState(
 @HiltViewModel
 class TrainsViewModel @Inject constructor(
     private val trainRepository: TrainRepository,
-    tripRepository: TripRepository,
-    trainStatusService: TrainStatusService,
-    timeProvider: TimeProvider
+    private val eventRepository: EventRepository,
+    private val tripRepository: TripRepository,
+    private val timeProvider: TimeProvider,
+    trainStatusService: TrainStatusService
 ) : ViewModel() {
 
     private val filter = MutableStateFlow(TrainFilter.UPCOMING)
@@ -128,7 +131,13 @@ class TrainsViewModel @Inject constructor(
     }
 
     fun deleteTrain(trainId: Long) {
-        viewModelScope.launch { trainRepository.deleteTrain(trainId) }
+        viewModelScope.launch {
+            val train = trainRepository.getTrainById(trainId).firstOrNull()
+            train?.eventId?.let { eventId ->
+                eventRepository.deleteEvent(eventId)
+            }
+            trainRepository.deleteTrain(trainId)
+        }
     }
 
     private fun TrainFilter.accepts(phase: TrainPhase): Boolean = when (this) {

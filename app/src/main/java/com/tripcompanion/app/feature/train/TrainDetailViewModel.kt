@@ -22,6 +22,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.time.Duration
@@ -239,6 +240,9 @@ class TrainDetailViewModel @Inject constructor(
 
     fun deleteTrain(onDone: () -> Unit) {
         viewModelScope.launch {
+            trainRepository.getTrainById(trainId).firstOrNull()?.eventId?.let { eventId ->
+                eventRepository.deleteEvent(eventId)
+            }
             trainRepository.deleteTrain(trainId)
             onDone()
         }
