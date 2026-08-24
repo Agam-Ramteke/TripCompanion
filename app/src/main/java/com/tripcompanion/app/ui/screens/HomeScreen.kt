@@ -62,8 +62,8 @@ import com.tripcompanion.app.ui.components.DayPlanStrip
 import com.tripcompanion.app.ui.components.EmptyState
 import com.tripcompanion.app.ui.components.FilterChipRow
 import com.tripcompanion.app.ui.components.HeroImage
-import com.tripcompanion.app.ui.components.PhotoBackdrop
 import com.tripcompanion.app.ui.components.PlanStepItem
+import com.tripcompanion.app.ui.components.PhotoBackdrop
 import com.tripcompanion.app.ui.components.PrimaryButton
 import com.tripcompanion.app.ui.components.QuickActionCard
 import com.tripcompanion.app.ui.components.SectionHeader
@@ -465,16 +465,14 @@ private fun phaseTone(phase: TripPhase): BadgeTone = when (phase) {
  *
  * The card takes the shape of whatever the next thing is. A booked journey is drawn as its ticket —
  * the same card the Trains tab and the itinerary use, so one train cannot look like three different
- * things (§4) — and everything else as its own facts. Either way the picture sits *behind* the
- * content rather than above it: a full-bleed photograph here would push the countdown, the times
- * and the two buttons off the only screenful of Home that has to be readable without scrolling.
+ * things (§4) — and everything else as its own facts.
  */
 @Composable
 private fun NextUpSection(
     event: Event,
     /** The booking behind [event], when it is a journey someone has actually booked. */
     train: Train?,
-    /** The activity's own photograph, already resolved; null leaves the card plain. */
+    /** The activity's own photo, faded behind the card. Ignored for trains — see below. */
     imageUri: String?,
     isNow: Boolean,
     place: Location?,
@@ -500,13 +498,14 @@ private fun NextUpSection(
         Spacer(Modifier.height(12.dp))
         AppMediaCard(onClick = onOpen) {
             Box {
-                PhotoBackdrop(
-                    uri = imageUri,
-                    // Decoration, and named as such: the card already says in words everything
-                    // the picture is of, so announcing it twice only lengthens the screen reader.
-                    contentDescription = null,
-                    modifier = Modifier.matchParentSize()
-                )
+                // A train keeps a solid card so the ticket reads like a printed ticket; an activity
+                // wears its own photo — blurred and faded to a wash its ordinary type sits on.
+                if (train == null) {
+                    PhotoBackdrop(
+                        uri = imageUri,
+                        modifier = Modifier.matchParentSize()
+                    )
+                }
                 Column {
                     if (train != null) {
                         TrainCard(
@@ -536,11 +535,13 @@ private fun NextUpSection(
                             } else {
                                 trainStatusTone(train, now)
                             },
-                            // Nested: the container owns the border, the padding and the
-                            // photograph, so a second opaque surface with its own ring would
-                            // read as a card inside a card and hide the picture besides.
+                            // Nested: the container owns the border, padding and elevation, so a
+                            // second surface with its own ring would read as a card inside a card —
+                            // and a transparent surface that still cast a shadow would show that
+                            // shadow through its own fill as a grey slab.
                             color = Color.Transparent,
-                            borderWidth = 0.dp
+                            borderWidth = 0.dp,
+                            elevation = 0.dp
                         )
                     } else {
                         ActivityFacts(

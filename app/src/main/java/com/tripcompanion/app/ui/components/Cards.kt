@@ -286,6 +286,7 @@ fun TrainCard(
     color: Color = MaterialTheme.colorScheme.surface,
     borderColor: Color = MaterialTheme.colorScheme.outline,
     borderWidth: Dp = AppThemeExtended.metrics.borderWidth,
+    elevation: Dp = AppThemeExtended.metrics.cardElevation,
     onClick: (() -> Unit)? = null
 ) {
     val colors = AppThemeExtended.colors
@@ -295,7 +296,8 @@ fun TrainCard(
         onClick = onClick,
         color = color,
         borderColor = borderColor,
-        borderWidth = borderWidth
+        borderWidth = borderWidth,
+        elevation = elevation
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),

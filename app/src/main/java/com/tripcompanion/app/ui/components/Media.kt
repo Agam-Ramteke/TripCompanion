@@ -25,6 +25,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -56,16 +57,17 @@ private val PhotoScrim = Brush.verticalGradient(
 )
 
 /**
- * A photograph behind a card's own content, washed out towards the surface it sits on.
+ * A photograph behind a card's own content, blurred and washed toward the surface it sits on.
  *
  * The counterpart of [PhotoScrim]: that one darkens a photo so white type can sit over it, this
- * one fades a photo towards the theme's own surface colour so the card's *ordinary* type still
- * can. A card that switched to white text whenever it happened to have a picture would read as
- * two different components; this way the photograph is atmosphere and the card is unchanged.
+ * one blurs a photo and fades it toward the theme's own surface colour so the card's *ordinary*
+ * type still can. A card that switched to white text whenever it happened to have a picture would
+ * read as two different components; this way the photograph is atmosphere and the card is unchanged.
  *
- * The fade is heavy on purpose. It has to hold up over a photograph nobody has seen — a bright
- * beach under light mode's pale surface and a dark interior under dark mode's are both cases
- * where a gentler wash leaves body text sitting on similar tones.
+ * [blurRadius] frosts the picture so it reads as texture rather than a competing image behind the
+ * text; the fade then only has to lift contrast the rest of the way, which is why it can be gentler
+ * (and the photo more present) than an unblurred wash would allow. Blur is a real render effect on
+ * API 31+ and a silent no-op below it — the fade alone still carries legibility there.
  *
  * Draw it with [Modifier.matchParentSize] inside a `Box` so the picture never decides the card's
  * height; the content does. Nothing is drawn at all when there is no picture, because a
@@ -76,6 +78,7 @@ fun PhotoBackdrop(
     uri: String?,
     modifier: Modifier = Modifier,
     fadeColor: Color = MaterialTheme.colorScheme.surface,
+    blurRadius: Dp = 16.dp,
     contentDescription: String? = null
 ) {
     if (uri.isNullOrBlank()) return
@@ -83,7 +86,9 @@ fun PhotoBackdrop(
         AppImage(
             uri = uri,
             contentDescription = contentDescription,
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxSize()
+                .blur(blurRadius),
             shape = RoundedCornerShape(0.dp)
         )
         Box(
@@ -91,9 +96,9 @@ fun PhotoBackdrop(
                 .fillMaxSize()
                 .background(
                     Brush.verticalGradient(
-                        0.0f to fadeColor.copy(alpha = 0.78f),
-                        0.55f to fadeColor.copy(alpha = 0.90f),
-                        1.0f to fadeColor.copy(alpha = 0.97f)
+                        0.0f to fadeColor.copy(alpha = 0.55f),
+                        0.55f to fadeColor.copy(alpha = 0.72f),
+                        1.0f to fadeColor.copy(alpha = 0.86f)
                     )
                 )
         )
