@@ -1,36 +1,39 @@
 package com.tripcompanion.app.di
 
+import com.tripcompanion.app.BuildConfig
 import com.tripcompanion.app.data.network.NominatimLocationSearchProvider
+import com.tripcompanion.app.data.network.maptiler.MapTilerLocationSearchProvider
 import com.tripcompanion.app.data.search.DefaultLocationSearchService
 import com.tripcompanion.app.domain.service.LocationSearchProvider
 import com.tripcompanion.app.domain.service.LocationSearchService
-import dagger.Binds
 import dagger.Module
+import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import javax.inject.Singleton
 
-/**
- * The two-step binding §11 asks for.
- *
- * The app depends on [LocationSearchService]; the service depends on a
- * [LocationSearchProvider]. Swapping Nominatim for Photon means changing the
- * second binding here and nothing else — no ViewModel, no screen, no test of
- * search policy.
- */
 @Module
 @InstallIn(SingletonComponent::class)
-abstract class SearchModule {
+object SearchModule {
 
-    @Binds
+    @Provides
     @Singleton
-    abstract fun bindLocationSearchProvider(
-        provider: NominatimLocationSearchProvider
-    ): LocationSearchProvider
+    fun provideLocationSearchProvider(
+        nominatimProvider: NominatimLocationSearchProvider,
+        mapTilerProvider: MapTilerLocationSearchProvider
+    ): LocationSearchProvider {
+        return if (BuildConfig.MAPTILER_API_KEY.isNotBlank()) {
+            mapTilerProvider
+        } else {
+            nominatimProvider
+        }
+    }
 
-    @Binds
+    @Provides
     @Singleton
-    abstract fun bindLocationSearchService(
+    fun provideLocationSearchService(
         service: DefaultLocationSearchService
-    ): LocationSearchService
+    ): LocationSearchService {
+        return service
+    }
 }

@@ -164,8 +164,8 @@ private fun maptilerSource(styleId: String, key: String): OnlineTileSourceBase =
  * asks for. Swap for a warmer prebuilt (`landscape`, `pastel`, `bright-v2`) here if the palette
  * should lean warmer; nothing else changes.
  */
-private const val MAPTILER_LIGHT_STYLE = "dataviz"
-private const val MAPTILER_DARK_STYLE = "dataviz-dark"
+private const val MAPTILER_LIGHT_STYLE = "streets-v2"
+private const val MAPTILER_DARK_STYLE = "streets-v2-dark"
 
 /** Which basemap [TripMap] draws: the themed raster (MapTiler when keyed, else CARTO), or Esri satellite. */
 enum class MapBasemap { Standard, Satellite }
