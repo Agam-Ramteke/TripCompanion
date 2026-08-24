@@ -129,6 +129,14 @@ class EventDetailViewModel @Inject constructor(
         viewModelScope.launch { plannedPhotoRepository.deletePhoto(photoId) }
     }
 
+    fun deleteEvent(onDone: () -> Unit) {
+        val event = _state.value.event ?: return
+        viewModelScope.launch {
+            eventRepository.deleteEvent(event.id)
+            onDone()
+        }
+    }
+
     /**
      * The events either side of this one, using the app's single ordering (§10).
      * Sorting here rather than trusting query order is what keeps Timeline, Home

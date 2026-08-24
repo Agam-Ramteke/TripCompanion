@@ -83,6 +83,7 @@ fun EventDetailScreen(
     val metrics = AppThemeExtended.metrics
     val colors = AppThemeExtended.colors
     var inspectedPhoto by remember { mutableStateOf<PlannedPhoto?>(null) }
+    var showDeleteConfirm by remember { mutableStateOf(false) }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -104,6 +105,9 @@ fun EventDetailScreen(
                     state.event?.let { event ->
                         IconButton(onClick = { onNavigateToEventEditor(event.tripId, event.id) }) {
                             Icon(Icons.Default.Edit, "Edit activity")
+                        }
+                        IconButton(onClick = { showDeleteConfirm = true }) {
+                            Icon(Icons.Default.Delete, "Delete activity")
                         }
                     }
                 },
@@ -441,6 +445,30 @@ fun EventDetailScreen(
                 viewModel.deletePhoto(photo.id)
                 inspectedPhoto = null
             }
+        )
+    }
+
+    if (showDeleteConfirm) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirm = false },
+            title = { Text("Delete this activity?") },
+            text = { Text("This will remove it from your itinerary. You cannot undo this.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showDeleteConfirm = false
+                    viewModel.deleteEvent(onNavigateBack)
+                }) {
+                    Text("Delete", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirm = false }) {
+                    Text("Keep it")
+                }
+            },
+            containerColor = MaterialTheme.colorScheme.surface,
+            titleContentColor = MaterialTheme.colorScheme.onSurface,
+            textContentColor = MaterialTheme.colorScheme.onSurfaceVariant
         )
     }
 }
