@@ -166,7 +166,7 @@ fun TrainDetailScreen(
 
         when (tab) {
             TAB_LIVE -> liveTab(state, train, viewModel)
-            TAB_ROUTE -> routeTab(state, viewModel)
+            TAB_ROUTE -> routeTab(state, train, viewModel)
             else -> detailsTab(
                 state = state,
                 train = train,
@@ -500,15 +500,24 @@ private fun NextStopCard(stop: TrainStopStatus, eta: LocalTime?, delayMinutes: I
 
 private fun LazyListScope.routeTab(
     state: TrainDetailUiState,
+    train: Train,
     viewModel: TrainDetailViewModel
 ) {
     // Actuals win when a run has been observed; the stored timetable is the fallback so the
     // route still reads on a train that has not started.
     val liveStops = state.status?.stops.orEmpty()
-    val rows = if (liveStops.isNotEmpty()) {
+    var rows = if (liveStops.isNotEmpty()) {
         liveStops.map { it.toRouteStop() }
     } else {
         state.stops.map { it.toRouteStop() }
+    }
+    
+    // Filter to show only the journey segment (boarding to deboarding)
+    val startIndex = rows.indexOfFirst { it.code.equals(train.originCode, ignoreCase = true) }.takeIf { it >= 0 } ?: 0
+    val endIndex = rows.indexOfLast { it.code.equals(train.destinationCode, ignoreCase = true) }.takeIf { it >= 0 } ?: (rows.size - 1)
+    
+    if (startIndex <= endIndex) {
+        rows = rows.subList(startIndex, endIndex + 1)
     }
 
     if (rows.isEmpty()) {
@@ -694,7 +703,7 @@ private fun LazyListScope.detailsTab(
         AppCard {
             SectionHeader(
                 title = "What only you know",
-                subtitle = "The live feed carries neither of these, so they are your notes."
+                subtitle = "Your personal notes that supplement the live feed."
             )
             Spacer(Modifier.height(6.dp))
             MetaRow(
