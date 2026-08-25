@@ -32,6 +32,7 @@ val railRadarApiKey: String = localProperties.getProperty("RAILRADAR_API_KEY").o
 val openRouteServiceApiKey: String =
     localProperties.getProperty("OPENROUTESERVICE_API_KEY").orEmpty().trim()
 val mapTilerApiKey: String = localProperties.getProperty("MAPTILER_API_KEY").orEmpty().trim()
+val geoapifyApiKey: String = localProperties.getProperty("GEOAPIFY_API_KEY").orEmpty().trim()
 
 android {
     namespace = "com.tripcompanion.app"
@@ -50,6 +51,7 @@ android {
         buildConfigField("String", "RAILRADAR_API_KEY", "\"$railRadarApiKey\"")
         buildConfigField("String", "OPENROUTESERVICE_API_KEY", "\"$openRouteServiceApiKey\"")
         buildConfigField("String", "MAPTILER_API_KEY", "\"$mapTilerApiKey\"")
+        buildConfigField("String", "GEOAPIFY_API_KEY", "\"$geoapifyApiKey\"")
 
         ksp {
             arg("room.schemaLocation", "$projectDir/schemas")

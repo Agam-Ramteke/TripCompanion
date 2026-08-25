@@ -2,6 +2,7 @@ package com.tripcompanion.app.di
 
 import com.tripcompanion.app.BuildConfig
 import com.tripcompanion.app.data.network.NominatimLocationSearchProvider
+import com.tripcompanion.app.data.network.geoapify.GeoapifyLocationSearchProvider
 import com.tripcompanion.app.data.network.maptiler.MapTilerLocationSearchProvider
 import com.tripcompanion.app.data.search.DefaultLocationSearchService
 import com.tripcompanion.app.domain.service.LocationSearchProvider
@@ -19,11 +20,11 @@ object SearchModule {
     @Provides
     @Singleton
     fun provideLocationSearchProvider(
-        nominatimProvider: NominatimLocationSearchProvider,
-        mapTilerProvider: MapTilerLocationSearchProvider
+        geoapifyProvider: GeoapifyLocationSearchProvider,
+        nominatimProvider: NominatimLocationSearchProvider
     ): LocationSearchProvider {
-        return if (BuildConfig.MAPTILER_API_KEY.isNotBlank()) {
-            mapTilerProvider
+        return if (BuildConfig.GEOAPIFY_API_KEY.isNotBlank()) {
+            geoapifyProvider
         } else {
             nominatimProvider
         }

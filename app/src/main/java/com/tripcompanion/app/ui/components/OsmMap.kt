@@ -278,18 +278,10 @@ fun TripMap(
     // Remembered so a recomposition doesn't rebuild the source object and drop the tile cache.
     val mapTilerKey = BuildConfig.MAPTILER_API_KEY
     val isDarkSurface = MaterialTheme.colorScheme.background.luminance() < 0.5f
-    val tiles = remember(basemap, isDarkSurface, mapTilerKey) {
+    val tiles = remember(basemap, isDarkSurface) {
         when (basemap) {
             MapBasemap.Satellite -> SatelliteTiles
-            MapBasemap.Standard -> when {
-                mapTilerKey.isNotBlank() ->
-                    maptilerSource(
-                        if (isDarkSurface) MAPTILER_DARK_STYLE else MAPTILER_LIGHT_STYLE,
-                        mapTilerKey
-                    )
-                isDarkSurface -> DarkMatterTiles
-                else -> VoyagerTiles
-            }
+            MapBasemap.Standard -> if (isDarkSurface) DarkMatterTiles else VoyagerTiles
         }
     }
     val resolvedRouteColor = if (routeColor.isSpecified) routeColor else accent
@@ -523,10 +515,9 @@ fun TripMap(
                 .padding(bottom = bottomInset)
         ) {
             Text(
-                text = when {
-                    basemap == MapBasemap.Satellite -> "© Esri, Maxar, Earthstar Geographics"
-                    BuildConfig.MAPTILER_API_KEY.isNotBlank() -> "© MapTiler · © OpenStreetMap"
-                    else -> "© OpenStreetMap · © CARTO"
+                text = when (basemap) {
+                    MapBasemap.Satellite -> "© Esri, Maxar, Earthstar Geographics"
+                    MapBasemap.Standard -> "© OpenStreetMap · © CARTO"
                 },
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
