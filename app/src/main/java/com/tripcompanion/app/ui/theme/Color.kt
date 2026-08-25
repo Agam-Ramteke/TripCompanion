@@ -108,8 +108,8 @@ object TravelLightColors {
 // ── Dark ───────────────────────────────────────────────────────────────────────
 
 object TravelDarkColors {
-    val Background = Color(0xFF0B0C0F)
-    val Surface = Color(0xFF15171B)
+    val Background = Color(0xFF000000)
+    val Surface = Color(0xFF000000)
     val SurfaceVariant = Color(0xFF1B1E23)
     val SurfaceRaised = Color(0xFF22262C)
 
