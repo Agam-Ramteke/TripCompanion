@@ -6,9 +6,11 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -41,6 +43,11 @@ import com.tripcompanion.app.ui.components.SettingsGroup
 import com.tripcompanion.app.ui.components.SettingsRow
 import com.tripcompanion.app.ui.components.SettingsRowDivider
 import com.tripcompanion.app.ui.theme.AppThemeExtended
+import com.tripcompanion.app.ui.theme.staggeredEntrance
+
+import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import com.tripcompanion.app.ui.components.AppIconButton
 
 /**
  * The rest of the app, with the size of each thing on the way in.
@@ -65,12 +72,14 @@ fun MoreScreen(
     val trip = state.trip
 
     LazyColumn(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier
+            .fillMaxSize()
+            .statusBarsPadding(),
         contentPadding = PaddingValues(
             start = metrics.screenPadding,
             end = metrics.screenPadding,
             top = 16.dp,
-            bottom = 32.dp
+            bottom = metrics.navHeight + 24.dp
         ),
         verticalArrangement = Arrangement.spacedBy(metrics.sectionGap)
     ) {
@@ -98,7 +107,7 @@ fun MoreScreen(
         // only content is its own empty state, so they are not offered at all.
         if (trip != null) {
             item("trip-destinations") {
-                Column {
+                Column(modifier = Modifier.staggeredEntrance(1)) {
                     Text(
                         text = "This trip",
                         style = MaterialTheme.typography.titleSmall,
@@ -130,7 +139,10 @@ fun MoreScreen(
         }
 
         item("places") {
-            SettingsGroup(title = "Places") {
+            SettingsGroup(
+                title = "Places",
+                modifier = Modifier.staggeredEntrance(if (trip != null) 2 else 1)
+            ) {
                 SettingsRow(
                     icon = Icons.Default.Place,
                     label = "To visit",
@@ -164,7 +176,10 @@ fun MoreScreen(
         }
 
         item("app") {
-            SettingsGroup(title = "App") {
+            SettingsGroup(
+                title = "App",
+                modifier = Modifier.staggeredEntrance(if (trip != null) 3 else 2)
+            ) {
                 if (trip != null) {
                     SettingsRow(
                         icon = Icons.Default.PhotoCamera,

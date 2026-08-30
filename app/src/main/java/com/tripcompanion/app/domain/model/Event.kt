@@ -19,6 +19,8 @@ data class Event(
     val backgroundImageUri: String? = null,
     val status: EventStatus = EventStatus.UPCOMING,
     val order: Int = 0,
+    val actualStartTime: LocalDateTime? = null,
+    val actualEndTime: LocalDateTime? = null,
     val createdAt: LocalDateTime = LocalDateTime.now(),
     val updatedAt: LocalDateTime = LocalDateTime.now()
 )

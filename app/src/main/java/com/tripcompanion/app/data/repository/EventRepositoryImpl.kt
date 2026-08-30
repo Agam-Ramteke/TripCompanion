@@ -22,6 +22,9 @@ class EventRepositoryImpl @Inject constructor(
     override fun getEventById(id: Long): Flow<Event?> =
         eventDao.getEventById(id).map { it?.toDomain() }
 
+    override suspend fun getEventByIdOnce(id: Long): Event? =
+        eventDao.getEventByIdOnce(id)?.toDomain()
+
     override fun getEventsForLocation(locationId: Long): Flow<List<Event>> =
         eventDao.getEventsForLocation(locationId).map { entities -> entities.map { it.toDomain() } }
 

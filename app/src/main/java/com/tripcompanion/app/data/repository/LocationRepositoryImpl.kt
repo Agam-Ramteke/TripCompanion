@@ -25,8 +25,14 @@ class LocationRepositoryImpl @Inject constructor(
     override suspend fun getLocationByIdOnce(id: Long): Location? =
         locationDao.getLocationByIdOnce(id)?.toDomain()
 
-    override suspend fun insertLocation(location: Location): Long =
-        locationDao.insertLocation(location.toEntity())
+    override suspend fun insertLocation(location: Location): Long {
+        val existing = locationDao.findLocationByName(location.name.trim())
+        return if (existing != null) {
+            existing.id
+        } else {
+            locationDao.insertLocation(location.toEntity())
+        }
+    }
 
     override suspend fun updateLocation(location: Location) =
         locationDao.updateLocation(location.copy(updatedAt = LocalDateTime.now()).toEntity())

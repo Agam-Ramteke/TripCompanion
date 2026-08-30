@@ -30,5 +30,7 @@ data class StayDetailsEntity(
     val contactPhone: String = "",
     val address: String = "",
     val checkInInstructions: String = "",
-    val photoUri: String? = null
+    val photoUri: String? = null,
+    val actualCheckIn: java.time.LocalDateTime? = null,
+    val actualCheckOut: java.time.LocalDateTime? = null
 )

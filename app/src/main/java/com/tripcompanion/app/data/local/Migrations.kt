@@ -379,5 +379,26 @@ object Migrations {
         }
     }
 
-    val ALL = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+    /**
+     * Train and hotel lifecycle tracking with separate scheduled and actual timestamps.
+     *
+     * Adds:
+     * - `events.actualStartTime`, `events.actualEndTime`
+     * - `trains.actualBoardingTime`, `trains.actualDepartureTime`, `trains.actualArrivalTime`, `trains.arrivalSource`
+     * - `stay_details.actualCheckIn`, `stay_details.actualCheckOut`
+     */
+    val MIGRATION_6_7 = object : Migration(6, 7) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE events ADD COLUMN actualStartTime TEXT DEFAULT NULL")
+            db.execSQL("ALTER TABLE events ADD COLUMN actualEndTime TEXT DEFAULT NULL")
+            db.execSQL("ALTER TABLE trains ADD COLUMN actualBoardingTime TEXT DEFAULT NULL")
+            db.execSQL("ALTER TABLE trains ADD COLUMN actualDepartureTime TEXT DEFAULT NULL")
+            db.execSQL("ALTER TABLE trains ADD COLUMN actualArrivalTime TEXT DEFAULT NULL")
+            db.execSQL("ALTER TABLE trains ADD COLUMN arrivalSource TEXT DEFAULT NULL")
+            db.execSQL("ALTER TABLE stay_details ADD COLUMN actualCheckIn TEXT DEFAULT NULL")
+            db.execSQL("ALTER TABLE stay_details ADD COLUMN actualCheckOut TEXT DEFAULT NULL")
+        }
+    }
+
+    val ALL = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
 }

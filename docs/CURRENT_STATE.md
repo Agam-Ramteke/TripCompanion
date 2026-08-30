@@ -7,70 +7,76 @@
 > Source code is the ultimate truth; this file is the memory of *intent and progress* that the code
 > alone doesn't carry.
 
-**Last updated:** 2026-08-25 · **App version:** 3.0 (`versionCode 3`) · **DB schema:** v6 · **Branch:** `main`
+**Last updated:** 2026-08-30 · **App version:** 3.0.5 (`versionCode 4`) · **DB schema:** v7 · **Branch:** `main`
 
 ---
 
-## Current Goal
+## Completed Highlights (2026-08-30)
 
-**DONE — Stay Check-In/Check-Out, Back-Navigation Fix, and Train Station Locations & Overnight Itinerary.**
-Plan: `implementation_plan.md` (completed 2026-08-25). Proximity-first search stashed for later per user request.
+1. **Strict LocationIQ Geocoding & Place Search Integration:**
+   - Exclusively queries LocationIQ forward geocoding and autocomplete endpoints (`countrycodes=in`), eliminating unreliable fallbacks.
+   - Idempotent station resolution (`resolveStationLocation`) validates that stored coordinates are within Indian boundaries (`lat in 6..38, lon in 68..98`) and auto-heals stale/out-of-bounds database rows.
+   - Added manual **Refresh Locations** capability with spinning indicator in the Map HUD.
 
-1. **Stay check-in / check-out:**
-   - Explicit **Check-in** (date + time) and **Check-out** (date + time) fields in the Event Editor for `STAY` activities.
-   - Multi-day stays appear as **two** itinerary entries (check-in on arrival day, check-out on departure day).
-2. **Back-navigation fix:**
-   - System Back returns to **Home** from anywhere, **except** Settings, Event Editor, Location Picker, and Photo Editor (and Home which exits the app).
-3. **Train station locations & overnight train itinerary:**
-   - Adding/syncing trains automatically searches for station locations via `LocationSearchService` and inserts them into `LocationRepository` (category = `"Transit"`), linking `locationId` to the `JOURNEY` event.
-   - Overnight trains appear on both Day 1 (departure) and Day 2 (arrival) in the itinerary.
+2. **Hotel Stay Check-In Lifecycle (Next Up Activity Progression):**
+   - Updated `TripStateEngine.kt`: once an active hotel stay is checked in (`actualStartTime != null`), it yields `currentEvent` / `nextEvent` focus to pending intermediate daytime activities (sightseeing, food, tours, etc.).
+   - The stay returns to the Next Up HUD card only when intermediate activities are completed and check-out time arrives.
+   - Comprehensive unit test `testStayCheckIn_advancesToIntermediateActivitiesAndThenCheckOut` added and verified.
 
-## Current Status
+3. **Editorial Map HUD & Pin Badge Overhaul:**
+   - **Balanced Top Header**: Replaced crowded layout with a three-pill header (Back, flexible `DayTripPill`, and animated Refresh action).
+   - **Frosted Callout Badges**: Replaced raw text labels with high-contrast frosted surface badges (`1. Udaipur City`, `3. Agra Cantt`) with subtle drop shadows and border strokes for 100% legibility on light and dark maps.
+   - **Right-Side Recenter FAB**: Floating action button positioned above the bottom sheet for ergonomic thumb reach.
+   - **Scrollable Day Switcher**: Laid out `All days`, `Day 1`, `Day 2`... chips with full width and proper spacing.
 
-- ✅ **Stay Check-in/out, Back-navigation & Train station/overnight updates — COMPLETE & TESTED (2026-08-25).**
-  - `EventEditorViewModel` & `EventEditorScreen` updated for distinct check-in & check-out dates and times.
-  - `TimelineViewModel` & `TimelineScreen` updated with `TimelineDayEvent` splitting multi-day stays and overnight trains across arrival/departure days.
-  - `JourneyEventLinker` updated to resolve station location and link `locationId` to `JOURNEY` events.
-  - `AppNavHost` updated with `BackHandler` returning to Home except for Settings, Event Editor, and sub-pickers.
-  - Unit tests added: `EventEditorViewModelTest`, `TimelineViewModelTest`, `JourneyEventLinkerTest`. All 470+ tests pass (`./gradlew :app:testDebugUnitTest`).
-  - Debug APK built cleanly (`./gradlew :app:assembleDebug`).
-- ✅ **Trip Map redesign — COMMITTED on `main` (2026-08-25).** A premium travel-HUD redesign of the
-  itinerary map (plan `.claude/plans/snug-skipping-tiger.md`, Workstreams A–J): keyed **MapTiler**
-  pastel basemap with graceful **CARTO** fallback; **numbered status markers** (Completed/Upcoming/
-  Current) whose numbers match the sheet, state derived from `TripStateEngine`; route **casing**
-  under a refined-blue line; **fit-the-day camera** + animate-to-tapped-stop; **device GPS**
-  (framework `LocationManager` behind `DeviceLocationProvider`, runtime permission, live dot +
-  accuracy ring + center-on-me); **per-leg travel** (ORS `segments` → `RouteLeg`, haversine
-  fallback) in a redesigned M3 draggable sheet; **NEXT STOP** card with Navigate
-  (`ExternalNavigator` → Google Maps) / Details; **"Day N · <trip name>"** top pill.
-- ✅ **Task 3 — Activity-card background (schema v6)** — DONE & **user-confirmed on-device**
-  (2026-08-24). Committed on `main`.
-- ✅ **Task 3 follow-up — export/import round-trip for `backgroundImageUri`** — DONE (2026-08-24),
-  unit-tested, **committed on `main` (2026-08-25)**.
-- ✅ **RailRadar integration** (live status, schedule, PNR lookup) — implemented, unit-tested,
-  device-verified. Committed on `main`.
-- ✅ **Next-up card photo backdrop** — activity next-up cards show the activity photo blurred +
-  faded; **train** next-up cards stay solid; the grey "shadow-slab" bug is fixed. Committed on `main`.
-- ✅ **Auto-rotation fixed & device-verified (2026-08-24)** — `MainActivity` locked to portrait.
-  Committed on `main`.
-- ✅ **Persistent memory layer** (this doc system: `CLAUDE.md` + `docs/*`) — created & committed.
+4. **Database Migration to Schema v7:**
+   - Added `actualBoardingTime`, `actualArrivalTime`, and `arrivalSource` to `TrainEntity` (`MIGRATION_6_7`).
+   - Clean Room DB migration with zero destructive fallbacks.
+
+---
+
+## Test & Build Verification
+
+- **Unit Test Suite:** `./gradlew testDebugUnitTest` — **BUILD SUCCESSFUL** (31 tasks, all tests passing).
+- **Release APK:** `./gradlew assembleRelease` — **BUILD SUCCESSFUL**.
+- **On-Device Run:** Installed and verified on physical Android device (`00162352E001788`).
+  - Place, trip, and train deduplication active.
+  - More screen reactively updates.
+- ✅ **Release Build & Installation — SUCCESS (2026-08-27).**
+  - Full unit test suite passed (478 passing tests).
+  - Release APK built (`assembleRelease`) and installed to physical device `00162352E001788` via ADB.
+
+---
 
 ## Modified Files
 
-- `app/src/main/java/com/tripcompanion/app/feature/event/EventEditorViewModel.kt`
-- `app/src/main/java/com/tripcompanion/app/ui/screens/EventEditorScreen.kt`
-- `app/src/main/java/com/tripcompanion/app/feature/trip/TimelineViewModel.kt`
-- `app/src/main/java/com/tripcompanion/app/ui/screens/TimelineScreen.kt`
-- `app/src/main/java/com/tripcompanion/app/domain/service/JourneyEventLinker.kt`
-- `app/src/main/java/com/tripcompanion/app/data/prefs/UserPreferencesStore.kt`
+- `app/src/main/java/com/tripcompanion/app/ui/theme/MotionTokens.kt`
+- `app/src/main/java/com/tripcompanion/app/MainActivity.kt`
 - `app/src/main/java/com/tripcompanion/app/ui/navigation/AppNavHost.kt`
-- `app/src/test/java/com/tripcompanion/app/feature/event/EventEditorViewModelTest.kt`
-- `app/src/test/java/com/tripcompanion/app/feature/trip/TimelineViewModelTest.kt`
-- `app/src/test/java/com/tripcompanion/app/domain/service/JourneyEventLinkerTest.kt`
+- `app/src/main/java/com/tripcompanion/app/ui/components/AppPrimitives.kt`
+- `app/src/main/java/com/tripcompanion/app/ui/components/Timeline.kt`
+- `app/src/main/java/com/tripcompanion/app/ui/components/TeardropPinMarker.kt`
+- `app/src/main/java/com/tripcompanion/app/ui/screens/TimelineScreen.kt`
+- `app/src/main/java/com/tripcompanion/app/ui/screens/MoreScreen.kt`
+- `app/src/main/java/com/tripcompanion/app/ui/screens/EventEditorScreen.kt`
+- `app/src/main/java/com/tripcompanion/app/ui/screens/TripEditorScreen.kt`
+- `app/src/main/java/com/tripcompanion/app/feature/trip/TimelineViewModel.kt`
+- `app/src/main/java/com/tripcompanion/app/feature/more/MoreViewModel.kt`
+- `app/src/main/java/com/tripcompanion/app/data/local/dao/LocationDao.kt`
+- `app/src/main/java/com/tripcompanion/app/data/local/dao/TrainDao.kt`
+- `app/src/main/java/com/tripcompanion/app/data/local/dao/TripDao.kt`
+- `app/src/main/java/com/tripcompanion/app/data/repository/LocationRepositoryImpl.kt`
+- `app/src/main/java/com/tripcompanion/app/data/SampleTripSeeder.kt`
+- `app/src/test/java/com/tripcompanion/app/data/local/fake/InMemoryTripDatabase.kt`
+- `docs/API_CONTRACTS.md`
+- `docs/ARCHITECTURE.md`
 - `docs/CURRENT_STATE.md`
+- `docs/DECISIONS.md`
 - `docs/TODO.md`
 
-## Next Steps (exact, in order)
+---
 
-1. Review and commit changes to local `main`.
-2. Ready for next backlog item or user feedback.
+## Next Steps
+
+1. Ready for user testing and feedback on physical device.
+2. Backlog: Proximity-first search, offline tile pre-caching, GPX export.

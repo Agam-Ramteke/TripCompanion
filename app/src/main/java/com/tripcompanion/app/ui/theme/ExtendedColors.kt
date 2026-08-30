@@ -9,8 +9,8 @@ import androidx.compose.ui.graphics.Color
  *
  * Three groups, and the grouping is the point:
  *
- *  - **Emphasis** — [accent] is blue used *as text or an icon on the background*, which
- *    needs more contrast than the blue that fills a button. [surfaceRaised] is a card on
+ *  - **Emphasis** — [accent] is teal used *as text or an icon on the background*, which
+ *    needs more contrast than the teal that fills a button. [surfaceRaised] is a card on
  *    a card. [textFaint] is a third text tier below `onSurfaceVariant`.
  *  - **Semantic** — success / warning / danger / info. Each comes as a triple: the solid
  *    for fills and icons, a `Soft` ground for badges, and a `Text` tone that is legible
@@ -70,14 +70,14 @@ data class ExtendedColors(
     val destinationText: Color = TravelLightColors.DestinationText,
 
     // Category, one per EventType
-    val journey: Color = TravelLightColors.Danger,
-    val journeySoft: Color = TravelLightColors.DangerSoft,
+    val journey: Color = TravelLightColors.Journey,
+    val journeySoft: Color = TravelLightColors.JourneySoft,
     val stay: Color = TravelLightColors.Accommodation,
     val staySoft: Color = TravelLightColors.AccommodationSoft,
-    val visit: Color = TravelLightColors.Primary,
-    val visitSoft: Color = TravelLightColors.PrimarySoft,
-    val food: Color = TravelLightColors.Warning,
-    val foodSoft: Color = TravelLightColors.WarningSoft,
+    val visit: Color = TravelLightColors.Visit,
+    val visitSoft: Color = TravelLightColors.VisitSoft,
+    val food: Color = TravelLightColors.Food,
+    val foodSoft: Color = TravelLightColors.FoodSoft,
     val custom: Color = TravelLightColors.Destination,
     val customSoft: Color = TravelLightColors.DestinationSoft,
 
@@ -124,14 +124,14 @@ val TravelDarkExtendedColors = ExtendedColors(
     destinationSoft = TravelDarkColors.DestinationSoft,
     destinationText = TravelDarkColors.DestinationText,
 
-    journey = TravelDarkColors.Danger,
-    journeySoft = TravelDarkColors.DangerSoft,
+    journey = TravelDarkColors.Journey,
+    journeySoft = TravelDarkColors.JourneySoft,
     stay = TravelDarkColors.Accommodation,
     staySoft = TravelDarkColors.AccommodationSoft,
-    visit = TravelDarkColors.Accent,
-    visitSoft = TravelDarkColors.PrimarySoft,
-    food = TravelDarkColors.Warning,
-    foodSoft = TravelDarkColors.WarningSoft,
+    visit = TravelDarkColors.Visit,
+    visitSoft = TravelDarkColors.VisitSoft,
+    food = TravelDarkColors.Food,
+    foodSoft = TravelDarkColors.FoodSoft,
     custom = TravelDarkColors.Destination,
     customSoft = TravelDarkColors.DestinationSoft,
 

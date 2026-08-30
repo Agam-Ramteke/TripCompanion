@@ -124,10 +124,11 @@ class TripMapViewModelTest {
         )
 
         val state = vm.state.value
-        assertEquals(
-            listOf(TravelLeg(5_000.0, 600.0), TravelLeg(7_000.0, 900.0)),
-            state.legs
-        )
+        assertEquals(2, state.legs.size)
+        assertEquals(5_000.0, state.legs[0].distanceMeters, 0.1)
+        assertEquals(600.0, state.legs[0].durationSeconds)
+        assertEquals(7_000.0, state.legs[1].distanceMeters, 0.1)
+        assertEquals(900.0, state.legs[1].durationSeconds)
     }
 
     /**

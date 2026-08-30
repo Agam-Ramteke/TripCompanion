@@ -21,7 +21,7 @@ import com.tripcompanion.app.data.local.entity.*
         TrainPassengerEntity::class,
         StayDetailsEntity::class
     ],
-    version = 6,
+    version = 7,
     exportSchema = true
 )
 @TypeConverters(Converters::class)

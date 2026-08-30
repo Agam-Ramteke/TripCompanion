@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.tripcompanion.app.core.time.TimeProvider
 import com.tripcompanion.app.data.SampleTripSeeder
 import com.tripcompanion.app.data.prefs.UserPreferencesStore
+import com.tripcompanion.app.domain.engine.TrainArrivalAutomator
 import com.tripcompanion.app.domain.engine.TripState
 import com.tripcompanion.app.domain.engine.TripStateEngine
 import com.tripcompanion.app.domain.engine.TripStats
@@ -90,6 +91,8 @@ data class HomeUiState(
     val focusedDay: LocalDate = LocalDate.MIN,
     /** Events on [focusedDay], statuses already computed by the engine (§21). */
     val focusedDayEvents: List<Event> = emptyList(),
+    /** Earliest departure/start datetime of the trip (from first event/train or start date). */
+    val tripStartDateTime: LocalDateTime? = null,
     val isLoading: Boolean = true,
     val hasTrips: Boolean = false,
     val trips: List<Trip> = emptyList(),
@@ -108,6 +111,7 @@ class HomeViewModel @Inject constructor(
     private val trainRepository: TrainRepository,
     private val photoRepository: PlannedPhotoRepository,
     private val stayDetailsRepository: StayDetailsRepository,
+    private val trainArrivalAutomator: TrainArrivalAutomator,
     private val sampleTripSeeder: SampleTripSeeder,
     private val userPreferences: UserPreferencesStore,
     private val timeProvider: TimeProvider
@@ -196,6 +200,7 @@ class HomeViewModel @Inject constructor(
                     }
 
                     val (trip, events, trains, photoCount, now) = snapshot
+                    trainArrivalAutomator.checkArrivals(trains)
                     val tripState = engine.computeState(trip, events, now)
                     val currentLocation = tripState.currentEvent?.locationId?.let {
                         locationRepository.getLocationByIdOnce(it)
@@ -214,10 +219,10 @@ class HomeViewModel @Inject constructor(
                     val focusTrain = focus?.let { event ->
                         trains.firstOrNull { it.eventId == event.id }
                     }
-                    val backdrop = nextUpImageUri(focus, focusPlace, trip)
+                    val nextUpImageUri = nextUpImageUri(focus, focusPlace, trip)
 
-                    _state.update {
-                        it.copy(
+                    _state.update { current ->
+                        current.copy(
                             trip = trip,
                             tripState = tripState,
                             stats = TripStats.compute(
@@ -231,13 +236,16 @@ class HomeViewModel @Inject constructor(
                             upcomingTrain = pickTrain(trains, now),
                             focusEvent = focus,
                             focusTrain = focusTrain,
-                            nextUpImageUri = backdrop,
+                            nextUpImageUri = nextUpImageUri,
                             now = now,
                             focusedDay = focusedDay,
                             focusedDayEvents = tripState.eventsWithComputedStatus.filter { event ->
                                 event.startTime.toLocalDate() == focusedDay ||
                                     event.endTime.toLocalDate() == focusedDay
                             },
+                            tripStartDateTime = events.minOfOrNull { it.startTime }
+                                ?: trains.minOfOrNull { it.departureTime }
+                                ?: trip?.startDate?.atStartOfDay(),
                             isLoading = false
                         )
                     }
@@ -249,9 +257,163 @@ class HomeViewModel @Inject constructor(
         selectedTripId.value = tripId
     }
 
-    fun completeEvent(event: Event) = setStatus(event, EventStatus.COMPLETED)
+    fun completeEvent(event: Event) {
+        val now = timeProvider.now()
+        setStatus(
+            event.copy(actualEndTime = event.actualEndTime ?: now),
+            EventStatus.COMPLETED
+        )
+    }
 
     fun skipEvent(event: Event) = setStatus(event, EventStatus.SKIPPED)
+
+    fun boardTrain(train: Train, event: Event) {
+        viewModelScope.launch {
+            val now = timeProvider.now()
+            trainRepository.updateTrain(train.copy(actualBoardingTime = now))
+            eventRepository.updateEvent(
+                event.copy(
+                    status = EventStatus.ACTIVE,
+                    actualStartTime = now,
+                    updatedAt = now
+                )
+            )
+        }
+    }
+
+    fun arriveTrain(train: Train, event: Event) {
+        viewModelScope.launch {
+            val now = timeProvider.now()
+            trainRepository.updateTrain(
+                train.copy(
+                    actualArrivalTime = now,
+                    arrivalSource = "MANUAL"
+                )
+            )
+            eventRepository.updateEvent(
+                event.copy(
+                    status = EventStatus.COMPLETED,
+                    actualEndTime = now,
+                    updatedAt = now
+                )
+            )
+        }
+    }
+
+    fun checkInStay(eventId: Long) {
+        viewModelScope.launch {
+            val now = timeProvider.now()
+            val stay = stayDetailsRepository.getForEventOnce(eventId)
+            if (stay != null) {
+                stayDetailsRepository.save(stay.copy(actualCheckIn = now))
+            }
+            val event = eventRepository.getEventByIdOnce(eventId)
+            if (event != null) {
+                eventRepository.updateEvent(
+                    event.copy(
+                        status = EventStatus.ACTIVE,
+                        actualStartTime = now,
+                        updatedAt = now
+                    )
+                )
+            }
+        }
+    }
+
+    fun checkOutStay(eventId: Long) {
+        viewModelScope.launch {
+            val now = timeProvider.now()
+            val stay = stayDetailsRepository.getForEventOnce(eventId)
+            if (stay != null) {
+                stayDetailsRepository.save(stay.copy(actualCheckOut = now))
+            }
+            val event = eventRepository.getEventByIdOnce(eventId)
+            if (event != null) {
+                eventRepository.updateEvent(
+                    event.copy(
+                        status = EventStatus.COMPLETED,
+                        actualEndTime = now,
+                        updatedAt = now
+                    )
+                )
+            }
+        }
+    }
+
+    fun undoBoardTrain(train: Train, event: Event) {
+        viewModelScope.launch {
+            val now = timeProvider.now()
+            trainRepository.updateTrain(train.copy(actualBoardingTime = null))
+            eventRepository.updateEvent(
+                event.copy(
+                    status = EventStatus.UPCOMING,
+                    actualStartTime = null,
+                    updatedAt = now
+                )
+            )
+        }
+    }
+
+    fun undoArriveTrain(train: Train, event: Event) {
+        viewModelScope.launch {
+            val now = timeProvider.now()
+            trainRepository.updateTrain(
+                train.copy(
+                    actualArrivalTime = null,
+                    arrivalSource = null
+                )
+            )
+            eventRepository.updateEvent(
+                event.copy(
+                    status = if (train.actualBoardingTime != null) EventStatus.ACTIVE else EventStatus.UPCOMING,
+                    actualEndTime = null,
+                    updatedAt = now
+                )
+            )
+        }
+    }
+
+    fun undoCheckInStay(eventId: Long) {
+        viewModelScope.launch {
+            val now = timeProvider.now()
+            val stay = stayDetailsRepository.getForEventOnce(eventId)
+            if (stay != null) {
+                stayDetailsRepository.save(stay.copy(actualCheckIn = null))
+            }
+            val event = eventRepository.getEventByIdOnce(eventId)
+            if (event != null) {
+                eventRepository.updateEvent(
+                    event.copy(
+                        status = EventStatus.UPCOMING,
+                        actualStartTime = null,
+                        updatedAt = now
+                    )
+                )
+            }
+        }
+    }
+
+    fun undoCheckOutStay(eventId: Long) {
+        viewModelScope.launch {
+            val now = timeProvider.now()
+            val stay = stayDetailsRepository.getForEventOnce(eventId)
+            if (stay != null) {
+                stayDetailsRepository.save(stay.copy(actualCheckOut = null))
+            }
+            val event = eventRepository.getEventByIdOnce(eventId)
+            if (event != null) {
+                eventRepository.updateEvent(
+                    event.copy(
+                        status = if (stay?.actualCheckIn != null) EventStatus.ACTIVE else EventStatus.UPCOMING,
+                        actualEndTime = null,
+                        updatedAt = now
+                    )
+                )
+            }
+        }
+    }
+
+    fun reopenEvent(event: Event) = setStatus(event.copy(actualStartTime = null, actualEndTime = null), EventStatus.UPCOMING)
 
     /**
      * Writes the sample trip and selects it, so the screen fills in rather than the user
@@ -273,7 +435,8 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             // The event handed in carries the engine's computed status, so copying
             // it wholesale would persist a derived value. Only the status changes.
-            eventRepository.updateEvent(event.copy(status = status))
+            val now = timeProvider.now()
+            eventRepository.updateEvent(event.copy(status = status, updatedAt = now))
         }
     }
 

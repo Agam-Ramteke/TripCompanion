@@ -20,7 +20,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -52,11 +51,15 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.tripcompanion.app.BuildConfig
+import com.tripcompanion.app.domain.model.DayRouteLeg
+import com.tripcompanion.app.domain.model.EventType
+import com.tripcompanion.app.domain.model.RouteLegStatus
 import com.tripcompanion.app.ui.theme.AppThemeExtended
 import org.osmdroid.events.MapListener
 import org.osmdroid.events.ScrollEvent
 import org.osmdroid.events.ZoomEvent
 import org.osmdroid.tileprovider.tilesource.OnlineTileSourceBase
+import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.tileprovider.tilesource.XYTileSource
 import org.osmdroid.util.BoundingBox
 import org.osmdroid.util.GeoPoint
@@ -67,46 +70,22 @@ import org.osmdroid.views.overlay.Polyline
 import kotlin.math.abs
 import kotlin.math.hypot
 
-/**
- * A CARTO raster basemap, addressed directly.
- *
- * osmdroid's own [org.osmdroid.tileprovider.tilesource.TileSourceFactory] only ships Mapnik and
- * friends, and Mapnik has one light raster set — which is why the old code had to invert it for
- * dark mode and then claw the hue back with a saturation matrix. CARTO publishes a light *and* a
- * dark set, so both themes get tiles that were drawn that way instead of a photographic negative.
- *
- * The base URLs must end in `/`: osmdroid appends `z/x/y` and [XYTileSource]'s extension to
- * whatever it is handed. Four subdomains because that is what the CDN expects and it is how
- * osmdroid parallelises a screenful of tiles.
- */
-private fun cartoSource(name: String, style: String) = XYTileSource(
-    name,
-    3,
-    20,
+/** Humanitarian OSM warm pastel tile source — free and key-less fallback. */
+private val OsmHotTiles = XYTileSource(
+    "osm-hot",
+    1,
+    19,
     256,
     ".png",
     arrayOf(
-        "https://a.basemaps.cartocdn.com/rastertiles/$style/",
-        "https://b.basemaps.cartocdn.com/rastertiles/$style/",
-        "https://c.basemaps.cartocdn.com/rastertiles/$style/",
-        "https://d.basemaps.cartocdn.com/rastertiles/$style/"
+        "https://a.tile.openstreetmap.fr/hot/",
+        "https://b.tile.openstreetmap.fr/hot/"
     ),
-    "© OpenStreetMap contributors © CARTO"
+    "© OpenStreetMap contributors, Humanitarian OpenStreetMap Team"
 )
 
-/** Soft pastel land, muted roads, restrained labels — the light basemap. */
-private val VoyagerTiles = cartoSource("carto-voyager", "voyager")
-
-/** The same cartography drawn dark, so night mode is not an inverted daytime map. */
-private val DarkMatterTiles = cartoSource("carto-dark", "dark_all")
-
 /**
- * Esri World Imagery — photographic satellite tiles, free and key-less like the CARTO basemaps.
- *
- * Esri serves its pyramid as `.../tile/{z}/{y}/{x}` — row before column — whereas osmdroid's
- * [XYTileSource] would hand back `{z}/{x}/{y}`. Left to the default that swap fetches the wrong
- * tile (or a 4xx), so the URL is assembled by hand. Attribution is a usage condition, surfaced by
- * [TripMap] whenever this source is the one showing.
+ * Esri World Imagery — photographic satellite tiles, free and key-less.
  */
 private val SatelliteTiles: OnlineTileSourceBase = object : OnlineTileSourceBase(
     "esri-world-imagery",
@@ -125,119 +104,69 @@ private val SatelliteTiles: OnlineTileSourceBase = object : OnlineTileSourceBase
 }
 
 /**
- * A MapTiler prebuilt raster style, keyed.
- *
- * The CARTO sets above are the keyless default; this is the *keyed* upgrade — a low-contrast
- * cartography chosen so the map recedes and the itinerary is the subject, exactly what a travel HUD
- * wants and what a general-purpose street map fights. It is the one tile source that needs a secret,
- * and the secret is the only new thing: like RailRadar and OpenRouteService the key rides in from
- * [BuildConfig] (← git-ignored `local.properties`), never the source. Absent a key, [TripMap] never
- * builds this and falls back to CARTO, so the map is whole either way.
- *
- * MapTiler serves `.../maps/{style}/256/{z}/{x}/{y}.png?key=…` — a query string osmdroid's
- * [XYTileSource] can't append, so the URL is assembled by hand like the Esri source. The style id
- * is the whole style ([MAPTILER_LIGHT_STYLE] / [MAPTILER_DARK_STYLE]); swap those constants to
- * retune the basemap without touching a call site. Attribution is a usage condition surfaced by
- * [TripMap] whenever this source is showing.
+ * LocationIQ raster street tile source.
  */
-private fun maptilerSource(styleId: String, key: String): OnlineTileSourceBase =
+private fun locationIqStreetSource(key: String): OnlineTileSourceBase =
     object : OnlineTileSourceBase(
-        "maptiler-$styleId",
-        3,
-        20,
+        "locationiq-streets",
+        1,
+        19,
         256,
         ".png",
-        arrayOf("https://api.maptiler.com/maps/$styleId/256/"),
-        "© MapTiler © OpenStreetMap contributors"
+        arrayOf("https://tiles.locationiq.com/v3/streets/r/"),
+        "© LocationIQ · © OpenStreetMap contributors"
     ) {
         override fun getTileURLString(pMapTileIndex: Long): String {
             val z = MapTileIndex.getZoom(pMapTileIndex)
             val x = MapTileIndex.getX(pMapTileIndex)
             val y = MapTileIndex.getY(pMapTileIndex)
-            return "https://api.maptiler.com/maps/$styleId/256/$z/$x/$y.png?key=$key"
+            return "https://tiles.locationiq.com/v3/streets/r/$z/$x/$y.png?key=$key"
         }
     }
 
 /**
- * MapTiler style ids for the two themes. Both are from MapTiler's low-contrast "dataviz" family —
- * built to sit *behind* content rather than be read as the content — which is the recede the brief
- * asks for. Swap for a warmer prebuilt (`landscape`, `pastel`, `bright-v2`) here if the palette
- * should lean warmer; nothing else changes.
+ * Geoapify raster tile source (osm-bright-smooth / positron / dark-matter).
  */
-private const val MAPTILER_LIGHT_STYLE = "streets-v2"
-private const val MAPTILER_DARK_STYLE = "streets-v2-dark"
+private fun geoapifySource(styleId: String, key: String): OnlineTileSourceBase =
+    object : OnlineTileSourceBase(
+        "geoapify-$styleId",
+        1,
+        20,
+        256,
+        ".png",
+        arrayOf("https://maps.geoapify.com/v1/tile/$styleId/"),
+        "© OpenStreetMap contributors © Geoapify"
+    ) {
+        override fun getTileURLString(pMapTileIndex: Long): String {
+            val z = MapTileIndex.getZoom(pMapTileIndex)
+            val x = MapTileIndex.getX(pMapTileIndex)
+            val y = MapTileIndex.getY(pMapTileIndex)
+            return "https://maps.geoapify.com/v1/tile/$styleId/$z/$x/$y.png?apiKey=$key"
+        }
+    }
 
-/** Which basemap [TripMap] draws: the themed raster (MapTiler when keyed, else CARTO), or Esri satellite. */
+/** Which basemap [TripMap] draws: the themed raster (Geoapify when keyed, else Mapnik), or Esri satellite. */
 enum class MapBasemap { Standard, Satellite }
 
 /**
  * A stop's progress, which decides how prominently its pin is drawn.
- *
- * Derived from the trip-state engine, never from a place name (§3): [Completed] is behind the
- * traveller (done, skipped, or missed), [Current] is where they are or are headed next, [Upcoming]
- * is everything still ahead. The three map onto three weights so a glance at the map reads the same
- * story the itinerary sheet tells — muted behind, emphasised ahead.
  */
 enum class MarkerState { Completed, Upcoming, Current }
 
 /**
  * One pin drawn over the map.
- *
- * Positions are geographic; the screen coordinate is worked out from the live projection every
- * time the camera moves, so a marker stays on its building rather than on its pixel.
- *
- * A numbered status chip, not a type teardrop: [number] is the stop's visiting order (the same
- * number the sheet card carries, so map and list are one system) and [state] sets the weight. The
- * event's [color] tints an upcoming pin; completed and current derive their own tones from the
- * status palette in [MapPinMarker].
  */
 data class MapMarker(
     val id: Long,
     val latitude: Double,
     val longitude: Double,
     val label: String,
-    /** Visiting order within the day, shown in the pin. Null draws a dot instead of a number. */
     val number: Int? = null,
     val color: Color,
+    val eventType: EventType = EventType.VISIT,
     val state: MarkerState = MarkerState.Upcoming
 )
 
-/**
- * A real, interactive OpenStreetMap canvas (§12).
- *
- * Pan and pinch-zoom come from osmdroid's own touch handling; the buttons are for
- * one-handed use. The pin is a fixed crosshair at the centre of the viewport and
- * the map moves underneath it — so "adjust the location manually" is just dragging
- * the map, and the coordinate the app saves is always the one under the crosshair.
- * There is no separate drag-the-marker mode to get out of sync with.
- *
- * §12 forbids a static image standing in for this. Nothing here is decorative:
- * remove the tiles and the screen stops working.
- *
- * Pass `interactive = false` for a map that reports a position rather than choosing one
- * — a saved place being displayed, not edited. It is still the same real map, still
- * loading real tiles; it just does not move under the finger, because a map that pans
- * on a read-only screen promises an edit that will not be saved.
- *
- * Pass [markers] to draw the trip's stops. Markers and the crosshair are alternatives, not
- * companions: a crosshair means "you are choosing a point", and showing one over a map of
- * places you already chose is a promise the screen does not keep.
- *
- * [onViewportChanged] reports the visible rectangle as four plain numbers rather than
- * osmdroid's own `BoundingBox`, so nothing above this file has to know which map library is
- * underneath. The location picker uses it to bias place search towards what is on screen.
- *
- * [routePoints], when given, are joined in itinerary order by a [Polyline] and a darker casing
- * beneath it. Whatever the caller hands over is drawn verbatim — road-following geometry from the
- * routing service, or straight legs when there is none — as a native osmdroid overlay that
- * re-projects on pan and zoom for free. [recenterTrigger] frames the whole day; bumping
- * [animateToTrigger] pans to ([animateToLatitude], [animateToLongitude]) — a tapped stop or
- * center-on-me. A non-null device position draws a distinct current-location dot with an accuracy
- * ring. [zoomAlignment] chooses the corner the zoom column sits in, and [bottomInset] lifts the zoom
- * and the tile attribution clear of a bottom sheet floating over the map. The screen stacks any
- * further chrome (layers, recenter, navigate) over the map itself, reusing [MapControlButton] for
- * the shared floating-circle style.
- */
 @Composable
 fun TripMap(
     latitude: Double,
@@ -250,15 +179,16 @@ fun TripMap(
     interactive: Boolean = true,
     initialZoom: Double = INITIAL_ZOOM,
     focusZoom: Double = FOCUS_ZOOM,
-    controlsPadding: PaddingValues = PaddingValues(12.dp),
+    controlsPadding: PaddingValues = PaddingValues(end = 12.dp),
     crosshairBottomPadding: Dp = 0.dp,
-    showCrosshair: Boolean = true,
+    showCrosshair: Boolean = crosshairBottomPadding > 0.dp,
     markers: List<MapMarker> = emptyList(),
     onMarkerClick: (MapMarker) -> Unit = {},
     routePoints: List<GeoPoint> = emptyList(),
+    legs: List<DayRouteLeg> = emptyList(),
     routeColor: Color = Color.Unspecified,
     basemap: MapBasemap = MapBasemap.Standard,
-    zoomAlignment: Alignment = Alignment.TopEnd,
+    zoomAlignment: Alignment = Alignment.CenterEnd,
     bottomInset: Dp = 0.dp,
     animateToTrigger: Int = 0,
     animateToLatitude: Double? = null,
@@ -269,45 +199,40 @@ fun TripMap(
 ) {
     val lifecycleOwner = LocalLifecycleOwner.current
     var mapRef by remember { mutableStateOf<MapView?>(null) }
+    val density = LocalDensity.current
 
-    val accent = AppThemeExtended.colors.accent
-    // Keyed pastel basemap when a MapTiler key is present; the keyless CARTO sets otherwise. Which
-    // cut — light or dark — is decided by the luminance of the surface the map sits on, not the
-    // theme's name (§4's no-special-cases habit), so a theme added later gets the right tiles
-    // untouched. Satellite ignores the theme: aerial photography has no light and dark edition.
-    // Remembered so a recomposition doesn't rebuild the source object and drop the tile cache.
-    val mapTilerKey = BuildConfig.MAPTILER_API_KEY
+    val locationIqKey = BuildConfig.LOCATIONIQ_API_KEY
+    val geoapifyKey = BuildConfig.GEOAPIFY_API_KEY
     val isDarkSurface = MaterialTheme.colorScheme.background.luminance() < 0.5f
-    val tiles = remember(basemap, isDarkSurface) {
+
+    val tiles = remember(basemap, isDarkSurface, locationIqKey, geoapifyKey) {
         when (basemap) {
             MapBasemap.Satellite -> SatelliteTiles
-            MapBasemap.Standard -> if (isDarkSurface) DarkMatterTiles else VoyagerTiles
+            MapBasemap.Standard -> {
+                when {
+                    locationIqKey.isNotBlank() -> locationIqStreetSource(locationIqKey)
+                    geoapifyKey.isNotBlank() -> {
+                        val style = if (isDarkSurface) "dark-matter" else "osm-bright-smooth"
+                        geoapifySource(style, geoapifyKey)
+                    }
+                    else -> if (isDarkSurface) TileSourceFactory.MAPNIK else OsmHotTiles
+                }
+            }
         }
     }
+
+    val accent = if (isDarkSurface) Color(0xFF26C6DA) else Color(0xFF2F5D50)
     val resolvedRouteColor = if (routeColor.isSpecified) routeColor else accent
-    // The route paint is plain Android — a native osmdroid overlay wants an ARGB int and a pixel
-    // width, not Compose types. Read here, in composition, where the density and colour resolve. The
-    // casing is a wider, darker line drawn beneath, so the route reads as a raised ribbon over busy
-    // tiles rather than a hairline lost in them.
     val routeArgb = resolvedRouteColor.toArgb()
-    val casingArgb = lerp(resolvedRouteColor, Color.Black, 0.35f).toArgb()
-    val routeWidthPx = with(LocalDensity.current) { ROUTE_WIDTH.toPx() }
-    val casingWidthPx = with(LocalDensity.current) { ROUTE_CASING_WIDTH.toPx() }
+    val casingArgb = if (isDarkSurface) Color(0xFF082226).toArgb() else Color(0xFF132B25).toArgb()
+    val routeWidthPx = with(density) { ROUTE_WIDTH.toPx() }
+    val casingWidthPx = with(density) { ROUTE_CASING_WIDTH.toPx() }
     var routeRef by remember { mutableStateOf<Polyline?>(null) }
     var casingRef by remember { mutableStateOf<Polyline?>(null) }
 
-    // Bumped on every scroll and zoom. The marker layer reads it so its screen positions are
-    // recomputed from the live projection; without it the pins would freeze where they were
-    // first drawn and slide off their places as soon as the map moved.
     var cameraTick by remember { mutableIntStateOf(0) }
-
-    // The initial camera is read once. Putting it in AndroidView's update block
-    // instead would snap the map back to state on every recomposition, which is
-    // indistinguishable from the map refusing to be dragged.
     val initialCenter = remember { GeoPoint(latitude, longitude) }
 
-    // osmdroid runs tile-download threads of its own and needs the lifecycle
-    // forwarded, or they keep working while the screen is in the background.
     DisposableEffect(lifecycleOwner, mapRef) {
         val map = mapRef
         val observer = LifecycleEventObserver { _, event ->
@@ -321,23 +246,23 @@ fun TripMap(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    // Recenter = frame the whole day. More than one visible pin fits them all in view with padding;
-    // a single pin (or none) falls back to a close focus on the centre. The fit itself is posted
-    // when the view has no size yet — zoomToBoundingBox needs a laid-out MapView, and the first
-    // recenter can beat the first layout.
     LaunchedEffect(recenterTrigger) {
         if (recenterTrigger > 0) {
             val map = mapRef ?: return@LaunchedEffect
+            val allPoints = when {
+                legs.isNotEmpty() -> legs.flatMap { leg -> leg.points.map { GeoPoint(it.first, it.second) } }
+                routePoints.size > 1 -> routePoints
+                markers.isNotEmpty() -> markers.map { GeoPoint(it.latitude, it.longitude) }
+                else -> listOf(GeoPoint(latitude, longitude))
+            }
             map.fitToPoints(
-                points = markers.map { GeoPoint(it.latitude, it.longitude) },
+                points = allPoints,
                 focusZoom = focusZoom,
                 fallback = GeoPoint(latitude, longitude)
             )
         }
     }
 
-    // Animate to one stop — a tapped pin, a tapped sheet row, or center-on-me. A monotonic trigger
-    // rather than a value change, so asking for the same stop twice still recentres it.
     LaunchedEffect(animateToTrigger) {
         if (animateToTrigger > 0 && animateToLatitude != null && animateToLongitude != null) {
             mapRef?.controller?.animateTo(
@@ -353,12 +278,8 @@ fun TripMap(
             factory = { context ->
                 MapView(context).apply {
                     setTileSource(tiles)
-                    // No colour filter. The tiles are already the right colour for this
-                    // theme, and tinting them again is what used to turn parks magenta.
                     overlayManager.tilesOverlay.setColorFilter(null)
                     setMultiTouchControls(interactive)
-                    // osmdroid's own zoom buttons are a dated widget; the app draws
-                    // its own so they follow the active theme.
                     zoomController.setVisibility(CustomZoomButtonsController.Visibility.NEVER)
                     setTilesScaledToDpi(true)
                     setMinZoomLevel(MIN_ZOOM)
@@ -367,9 +288,6 @@ fun TripMap(
                     controller.setCenter(initialCenter)
 
                     if (!interactive) {
-                        // Swallowing the gesture before osmdroid sees it is the only way
-                        // to stop panning outright — MapView has no read-only mode, and
-                        // clearing multi-touch alone still leaves single-finger drag.
                         setOnTouchListener { _, _ -> true }
                     }
 
@@ -384,15 +302,8 @@ fun TripMap(
                             return true
                         }
 
-                        /**
-                         * The camera, in the two forms callers ask for.
-                         *
-                         * Read from the live [MapView] rather than from the event, because a
-                         * [ScrollEvent] carries only a scroll offset and a [ZoomEvent] only a
-                         * zoom level — neither knows where the map ended up.
-                         */
                         private fun report() {
-                            mapCenter.let { onCenterChanged(it.latitude, it.longitude) }
+                            mapCenter?.let { onCenterChanged(it.latitude, it.longitude) }
                             boundingBox?.let {
                                 onViewportChanged(
                                     it.latNorth,
@@ -405,17 +316,14 @@ fun TripMap(
                         }
                     })
 
-                    // The route is a native overlay, not a Compose layer: osmdroid re-projects it on
-                    // every pan and zoom for free, and it stays under the pins because the pins are
-                    // drawn in Compose above this view. Whatever line it is handed — road-following
-                    // geometry from the routing service, or straight legs when there is none — is
-                    // drawn the same way. A casing goes on first so it sits beneath the accent line.
                     val casing = Polyline(this).apply {
                         outlinePaint.color = casingArgb
                         outlinePaint.strokeWidth = casingWidthPx
                         outlinePaint.isAntiAlias = true
                         outlinePaint.strokeCap = Paint.Cap.ROUND
                         outlinePaint.strokeJoin = Paint.Join.ROUND
+                        infoWindow = null
+                        setOnClickListener { _, _, _ -> true }
                         isVisible = false
                     }
                     overlays.add(casing)
@@ -427,6 +335,8 @@ fun TripMap(
                         outlinePaint.isAntiAlias = true
                         outlinePaint.strokeCap = Paint.Cap.ROUND
                         outlinePaint.strokeJoin = Paint.Join.ROUND
+                        infoWindow = null
+                        setOnClickListener { _, _, _ -> true }
                         isVisible = false
                     }
                     overlays.add(route)
@@ -436,25 +346,87 @@ fun TripMap(
                 }
             },
             update = { map ->
-                // The theme can flip while this screen is open, so the source is re-checked —
-                // but only swapped when it actually differs. Calling setTileSource with the
-                // source already in place drops the tile cache, and the map blinks through
-                // empty grey on every recomposition.
                 if (map.tileProvider.tileSource.name() != tiles.name()) {
                     map.setTileSource(tiles)
                 }
-                // Refresh the route and its casing in place. setPoints on the existing overlays
-                // avoids tearing them down and rebuilding every recomposition; both hide below two
-                // points, where a "line" would just be a dot.
-                casingRef?.let { casing ->
-                    casing.setPoints(routePoints)
-                    casing.outlinePaint.color = casingArgb
-                    casing.isVisible = routePoints.size >= 2
-                }
-                routeRef?.let { route ->
-                    route.setPoints(routePoints)
-                    route.outlinePaint.color = routeArgb
-                    route.isVisible = routePoints.size >= 2
+
+                // Render multi-leg overlays if legs are provided
+                if (legs.isNotEmpty()) {
+                    // Hide single fallback polyline
+                    casingRef?.isVisible = false
+                    routeRef?.isVisible = false
+
+                    // Remove existing dynamic leg polylines
+                    map.overlays.removeAll { it is Polyline && it != routeRef && it != casingRef }
+
+                    legs.forEach { leg ->
+                        val (coreColor, casingColor, coreWidth, casingWidth) = when (leg.status) {
+                            RouteLegStatus.COMPLETED -> {
+                                val core = if (isDarkSurface) Color(0xFF52736C).toArgb() else Color(0xFF7E948E).toArgb()
+                                val casing = if (isDarkSurface) Color(0xFF2A3F3B).toArgb() else Color(0xFF50615C).toArgb()
+                                val w = with(density) { 4.5.dp.toPx() }
+                                val cw = with(density) { 7.5.dp.toPx() }
+                                listOf(core, casing, w, cw)
+                            }
+                            RouteLegStatus.CURRENT -> {
+                                val core = if (routeColor.isSpecified) routeColor.toArgb() else (if (isDarkSurface) Color(0xFF26C6DA).toArgb() else Color(0xFF2F5D50).toArgb())
+                                val casing = if (isDarkSurface) Color(0xFF061D22).toArgb() else Color(0xFF132B25).toArgb()
+                                val w = with(density) { 6.5.dp.toPx() }
+                                val cw = with(density) { 10.5.dp.toPx() }
+                                listOf(core, casing, w, cw)
+                            }
+                            RouteLegStatus.FUTURE -> {
+                                val core = if (isDarkSurface) Color(0xFF6D8F87).toArgb() else Color(0xFF9BB6AF).toArgb()
+                                val casing = if (isDarkSurface) Color(0xFF384D47).toArgb() else Color(0xFF6F857F).toArgb()
+                                val w = with(density) { 4.0.dp.toPx() }
+                                val cw = with(density) { 6.5.dp.toPx() }
+                                listOf(core, casing, w, cw)
+                            }
+                        }
+
+                        val pts = leg.points.map { GeoPoint(it.first, it.second) }
+                        if (pts.size >= 2) {
+                            val legCasing = Polyline(map).apply {
+                                outlinePaint.color = casingColor as Int
+                                outlinePaint.strokeWidth = casingWidth as Float
+                                outlinePaint.isAntiAlias = true
+                                outlinePaint.strokeCap = Paint.Cap.ROUND
+                                outlinePaint.strokeJoin = Paint.Join.ROUND
+                                infoWindow = null
+                                setOnClickListener { _, _, _ -> true }
+                                setPoints(pts)
+                            }
+                            val legLine = Polyline(map).apply {
+                                outlinePaint.color = coreColor as Int
+                                outlinePaint.strokeWidth = coreWidth as Float
+                                outlinePaint.isAntiAlias = true
+                                outlinePaint.strokeCap = Paint.Cap.ROUND
+                                outlinePaint.strokeJoin = Paint.Join.ROUND
+                                infoWindow = null
+                                setOnClickListener { _, _, _ -> true }
+                                setPoints(pts)
+                            }
+                            map.overlays.add(legCasing)
+                            map.overlays.add(legLine)
+                        }
+                    }
+                } else {
+                    // Fallback to single polyline
+                    map.overlays.removeAll { it is Polyline && it != routeRef && it != casingRef }
+                    casingRef?.let { casing ->
+                        casing.setPoints(routePoints)
+                        casing.outlinePaint.color = casingArgb
+                        casing.infoWindow = null
+                        casing.setOnClickListener { _, _, _ -> true }
+                        casing.isVisible = routePoints.size >= 2
+                    }
+                    routeRef?.let { route ->
+                        route.setPoints(routePoints)
+                        route.outlinePaint.color = routeArgb
+                        route.infoWindow = null
+                        route.setOnClickListener { _, _, _ -> true }
+                        route.isVisible = routePoints.size >= 2
+                    }
                 }
                 map.invalidate()
             },
@@ -494,30 +466,21 @@ fun TripMap(
             )
         }
 
-        if (interactive) {
-            ZoomControl(
-                onZoomIn = { mapRef?.controller?.zoomIn() },
-                onZoomOut = { mapRef?.controller?.zoomOut() },
-                modifier = Modifier
-                    .align(zoomAlignment)
-                    .padding(controlsPadding)
-                    .padding(bottom = bottomInset)
-            )
-        }
-
-        // Attribution is a condition of using these tiles, not decoration — and it must name
-        // whoever actually drew what is on screen, so it follows the basemap. Lifted by
-        // [bottomInset] so a sheet floating over the map cannot bury the credit.
         Surface(
             color = MaterialTheme.colorScheme.surface.copy(alpha = 0.82f),
+            shape = RoundedCornerShape(4.dp),
             modifier = Modifier
                 .align(Alignment.BottomStart)
-                .padding(bottom = bottomInset)
+                .padding(start = 12.dp, bottom = bottomInset + 8.dp)
         ) {
             Text(
                 text = when (basemap) {
                     MapBasemap.Satellite -> "© Esri, Maxar, Earthstar Geographics"
-                    MapBasemap.Standard -> "© OpenStreetMap · © CARTO"
+                    MapBasemap.Standard -> when {
+                        locationIqKey.isNotBlank() -> "© LocationIQ · © OpenStreetMap contributors"
+                        geoapifyKey.isNotBlank() -> "© Geoapify · © OpenStreetMap"
+                        else -> "© OpenStreetMap contributors"
+                    }
                 },
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -528,15 +491,7 @@ fun TripMap(
 }
 
 /**
- * The pins, drawn in Compose rather than as osmdroid overlays.
- *
- * osmdroid wants a `Drawable` per marker, which means baking a bitmap for every category
- * colour and re-baking them when the theme flips. Reading the projection and laying the pins
- * out as composables keeps one source of truth for the palette and gives the numbers real
- * type instead of rasterised text.
- *
- * [cameraTick] is what makes this correct: the projection is only valid for the current
- * camera, so the positions are recomputed whenever it changes.
+ * The pins, drawn in Compose using custom illustrated [TeardropPinMarker] components.
  */
 @Composable
 private fun MarkerLayer(
@@ -547,140 +502,39 @@ private fun MarkerLayer(
     modifier: Modifier = Modifier
 ) {
     if (map == null) return
-    val projection = map.projection
-    val density = LocalDensity.current
+    val projection = map.projection ?: return
 
-    // Read once per camera change, not once per marker: the projection is the expensive part.
     val placed = remember(cameraTick, markers, projection) {
         val point = Point()
-        markers.map { marker ->
-            projection.toPixels(GeoPoint(marker.latitude, marker.longitude), point)
-            marker to IntOffset(point.x, point.y)
-        }
-    }
-
-    // Draw completed pins first and the current pin last, so the emphasised current marker (and its
-    // halo) is never clipped by a neighbour laid down after it.
-    val ordered = remember(placed) {
-        placed.sortedBy { (marker, _) ->
-            when (marker.state) {
-                MarkerState.Completed -> 0
-                MarkerState.Upcoming -> 1
-                MarkerState.Current -> 2
+        markers.mapNotNull { marker ->
+            try {
+                projection.toPixels(GeoPoint(marker.latitude, marker.longitude), point)
+                marker to (point.x.toFloat() to point.y.toFloat())
+            } catch (_: Exception) {
+                null
             }
         }
     }
-    val halfSlot = with(density) { MARKER_SLOT.toPx() / 2f }
 
     Box(modifier) {
-        ordered.forEach { (marker, offset) ->
-            // Every marker fills the same halo-sized slot with its badge centred, so the stop's
-            // geographic point is the slot's centre: shift up and left by half the slot.
-            MapPinMarker(
-                marker = marker,
-                onClick = { onMarkerClick(marker) },
-                modifier = Modifier.offset {
-                    IntOffset(
-                        x = offset.x - halfSlot.toInt(),
-                        y = offset.y - halfSlot.toInt()
-                    )
-                }
+        placed.forEach { (marker, coords) ->
+            TeardropPinMarker(
+                title = marker.label,
+                eventType = marker.eventType,
+                pinColor = marker.color,
+                isFocused = marker.state == MarkerState.Current,
+                isCompleted = marker.state == MarkerState.Completed,
+                orderNumber = marker.number,
+                screenX = coords.first,
+                screenY = coords.second,
+                onClick = { onMarkerClick(marker) }
             )
         }
     }
 }
 
 /**
- * One pin: a numbered status chip.
- *
- * The teardrop-with-a-glyph gave way to a numbered circle in three weights (the numbered-plus-status
- * decision), so the map and the itinerary sheet tell one story — a glance reads *which stop* and
- * *where it stands*, and the number is the same on both. Weight, not hue, carries status:
- *
- *  - **Completed** — the smallest chip, a muted [com.tripcompanion.app.ui.theme.ExtendedColors]
- *    `statusCompleted` grey with a check instead of a number: done, and visibly behind the traveller.
- *  - **Upcoming** — a medium chip in the event's own category colour, present but quiet.
- *  - **Current** — the largest chip in the active accent, lifted by a shadow and ringed by a
- *    restrained halo: the one stop the eye should land on first.
- *
- * Every state fills the same [MARKER_SLOT] box with its badge centred, so [MarkerLayer] anchors
- * them all identically regardless of size.
- */
-@Composable
-private fun MapPinMarker(
-    marker: MapMarker,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val palette = AppThemeExtended.colors
-    val isCurrent = marker.state == MarkerState.Current
-    val isCompleted = marker.state == MarkerState.Completed
-
-    val badgeColor = when (marker.state) {
-        MarkerState.Current -> palette.accent
-        MarkerState.Upcoming -> marker.color
-        MarkerState.Completed -> palette.statusCompleted
-    }
-    val badgeSize = when (marker.state) {
-        MarkerState.Current -> CURRENT_BADGE
-        MarkerState.Upcoming -> UPCOMING_BADGE
-        MarkerState.Completed -> COMPLETED_BADGE
-    }
-
-    Box(modifier.size(MARKER_SLOT), contentAlignment = Alignment.Center) {
-        // The halo is the current pin's alone — a soft accent ring that says "here" without the
-        // heavy pin-drop the brief rules out.
-        if (isCurrent) {
-            Box(
-                Modifier
-                    .size(CURRENT_HALO)
-                    .clip(CircleShape)
-                    .background(palette.accent.copy(alpha = 0.18f))
-            )
-        }
-        Surface(
-            onClick = onClick,
-            shape = CircleShape,
-            color = badgeColor,
-            border = BorderStroke(2.dp, MaterialTheme.colorScheme.surface),
-            shadowElevation = when {
-                isCurrent -> 6.dp
-                isCompleted -> 1.dp
-                else -> 3.dp
-            },
-            modifier = Modifier.size(badgeSize)
-        ) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                if (isCompleted) {
-                    Icon(
-                        Icons.Default.Check,
-                        contentDescription = null,
-                        tint = Color.White,
-                        modifier = Modifier.size(badgeSize * 0.52f)
-                    )
-                } else {
-                    Text(
-                        text = marker.number?.toString() ?: "•",
-                        style = AppThemeExtended.text.badge,
-                        color = Color.White
-                    )
-                }
-            }
-        }
-    }
-}
-
-/**
- * The device's own position, drawn unlike any itinerary pin.
- *
- * A small filled dot marks the exact fix; a faint ring around it shows the reported accuracy at the
- * current zoom, so a coarse fix looks coarse rather than falsely precise. Coloured with the theme's
- * `info` blue — kept distinct from the accent that fills the route and the current-stop pin, so
- * "where I am" never reads as "where I'm going". Re-projected on every [cameraTick], exactly like
- * [MarkerLayer].
- *
- * The ring radius is worked out by projecting a point [accuracyMeters] due east of the fix and
- * measuring the pixel gap, so it scales with zoom without a metres-per-pixel constant.
+ * The device's own position, drawn with accuracy radius ring and blue pulse dot.
  */
 @Composable
 private fun CurrentLocationLayer(
@@ -692,34 +546,37 @@ private fun CurrentLocationLayer(
     modifier: Modifier = Modifier
 ) {
     if (map == null) return
-    val projection = map.projection
+    val projection = map.projection ?: return
     val density = LocalDensity.current
     val dotColor = AppThemeExtended.colors.info
 
     val placed = remember(cameraTick, latitude, longitude, accuracyMeters, projection) {
-        val center = Point()
-        projection.toPixels(GeoPoint(latitude, longitude), center)
-        val radiusPx = accuracyMeters?.takeIf { it > 0f }?.let { acc ->
-            val edge = Point()
-            projection.toPixels(
-                GeoPoint(latitude, longitude).destinationPoint(acc.toDouble(), 90.0),
-                edge
-            )
-            hypot((edge.x - center.x).toDouble(), (edge.y - center.y).toDouble()).toFloat()
+        try {
+            val center = Point()
+            projection.toPixels(GeoPoint(latitude, longitude), center)
+            val radiusPx = accuracyMeters?.takeIf { it > 0f }?.let { acc ->
+                val edge = Point()
+                projection.toPixels(
+                    GeoPoint(latitude, longitude).destinationPoint(acc.toDouble(), 90.0),
+                    edge
+                )
+                hypot((edge.x - center.x).toDouble(), (edge.y - center.y).toDouble()).toFloat()
+            }
+            Triple(center.x, center.y, radiusPx)
+        } catch (_: Exception) {
+            Triple(0, 0, null)
         }
-        Triple(center.x, center.y, radiusPx)
     }
     val (centerX, centerY, radiusPx) = placed
+    if (centerX == 0 && centerY == 0) return
 
     Box(modifier) {
-        // Accuracy ring, only when it is meaningfully larger than the dot — a three-metre ring under
-        // a 16dp dot is noise, not information.
         if (radiusPx != null) {
             val ringDiameter = with(density) { (radiusPx * 2f).toDp() }
             if (ringDiameter > GPS_DOT) {
                 Box(
                     Modifier
-                        .offset { IntOffset(centerX - radiusPx.toInt(), centerY - radiusPx.toInt()) }
+                        .offset { IntOffset((centerX - radiusPx).toInt(), (centerY - radiusPx).toInt()) }
                         .size(ringDiameter)
                         .clip(CircleShape)
                         .background(dotColor.copy(alpha = 0.14f))
@@ -734,15 +591,14 @@ private fun CurrentLocationLayer(
             border = BorderStroke(2.dp, Color.White),
             shadowElevation = 2.dp,
             modifier = Modifier
-                .offset { IntOffset(centerX - (dotPx / 2f).toInt(), centerY - (dotPx / 2f).toInt()) }
+                .offset { IntOffset((centerX - (dotPx / 2f)).toInt(), (centerY - (dotPx / 2f)).toInt()) }
                 .size(GPS_DOT)
         ) {}
     }
 }
 
 /**
- * The pin. A ring on a stem over a ground dot: the ring shows the target, the dot
- * shows the exact point, and the gap between them keeps the point itself visible.
+ * Center target crosshair for location picking.
  */
 @Composable
 private fun MapCrosshair(modifier: Modifier = Modifier) {
@@ -783,14 +639,7 @@ private fun MapCrosshair(modifier: Modifier = Modifier) {
 }
 
 /**
- * One floating map control — reused by the map screen for its layers, recenter and navigate
- * buttons, so the whole set lifts off the tiles by the same amount and reads as one family.
- *
- * Round, not the app's rounded rectangle. Everywhere else a card is a container for content and
- * the shared [AppCard] is right; here the button floats over a photograph-like surface with
- * nothing to align to, and a circle is the shape that reads as a control rather than as a very
- * small card. [tint] lets a caller colour the glyph — the navigate arrow goes green — while the
- * circle itself stays the surface colour so the family holds together.
+ * Floating map control button.
  */
 @Composable
 fun MapControlButton(
@@ -805,6 +654,10 @@ fun MapControlButton(
         onClick = onClick,
         shape = CircleShape,
         color = MaterialTheme.colorScheme.surface,
+        border = androidx.compose.foundation.BorderStroke(
+            width = 1.dp,
+            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+        ),
         shadowElevation = AppThemeExtended.metrics.cardElevation,
         modifier = modifier.size(size)
     ) {
@@ -820,14 +673,10 @@ fun MapControlButton(
 }
 
 /**
- * The zoom control: one rounded pill with + above − and a hairline between, per the mockup.
- *
- * A single pill rather than two circles, because zoom-in and zoom-out are one control with two
- * ends and the mockup draws them joined. Each half is a full-width square tap target, so the
- * touch area is the whole end of the pill, not just the glyph.
+ * Zoom control pill (+ / -).
  */
 @Composable
-private fun ZoomControl(
+internal fun ZoomControl(
     onZoomIn: () -> Unit,
     onZoomOut: () -> Unit,
     modifier: Modifier = Modifier
@@ -854,7 +703,7 @@ private fun ZoomControl(
 }
 
 @Composable
-private fun ZoomButton(icon: ImageVector, label: String, onClick: () -> Unit) {
+internal fun ZoomButton(icon: ImageVector, label: String, onClick: () -> Unit) {
     Box(
         Modifier
             .size(AppThemeExtended.metrics.controlHeight)
@@ -872,12 +721,6 @@ private fun ZoomButton(icon: ImageVector, label: String, onClick: () -> Unit) {
 
 /**
  * Frame a set of points, or fall back to a close focus.
- *
- * More than one point: fit the bounding box with a margin so the whole day is on screen. A box whose
- * span is a few metres — every stop in one building — would zoom to the max and read as a bug, so a
- * near-degenerate box is treated as a single point. Posted when the map has not been laid out yet,
- * because [MapView.zoomToBoundingBox] needs real view dimensions and the first recenter can arrive
- * before the first layout.
  */
 private fun MapView.fitToPoints(points: List<GeoPoint>, focusZoom: Double, fallback: GeoPoint) {
     val run = Runnable {
@@ -906,37 +749,13 @@ private fun MapView.fitToPoints(points: List<GeoPoint>, focusZoom: Double, fallb
     if (width == 0 || height == 0) post(run) else run.run()
 }
 
-/**
- * Marker sizing. Every pin is drawn inside a [MARKER_SLOT] box so all three states anchor
- * identically; the badge is one of three diameters by status, and only [MarkerState.Current] fills
- * the slot with a [CURRENT_HALO] ring. The slot equals the halo so the largest marker is never
- * clipped by its own anchoring box.
- */
-private val COMPLETED_BADGE = 26.dp
-private val UPCOMING_BADGE = 32.dp
-private val CURRENT_BADGE = 40.dp
-private val CURRENT_HALO = 60.dp
-private val MARKER_SLOT = CURRENT_HALO
-
-/** The device-location dot's diameter — distinct from the numbered pins, so GPS never reads as a stop. */
 private val GPS_DOT = 16.dp
-
-/**
- * Stroke of the itinerary route and its casing. The casing is wider so a darker line shows as a lip
- * on both sides of the accent route, lifting it off busy tiles; both are wide enough to read, not a
- * highway.
- */
 private val ROUTE_WIDTH = 6.dp
 private val ROUTE_CASING_WIDTH = 10.dp
-
-private const val INITIAL_ZOOM = 5.0
-private const val FOCUS_ZOOM = 16.0
+private const val INITIAL_ZOOM = 12.5
+private const val FOCUS_ZOOM = 15.5
 private const val MIN_ZOOM = 3.0
-private const val MAX_ZOOM = 19.0
-
-/** Camera timing and framing for the fit-the-day / animate-to-stop moves. */
+private const val MAX_ZOOM = 20.0
 private const val CAMERA_ANIM_MS = 800L
-private const val FIT_PADDING_PX = 140
-
-/** Below this span (~400 m) a "day" is effectively one point: a fit would zoom to the max and jar. */
+private const val FIT_PADDING_PX = 48
 private const val MIN_FIT_SPAN_DEG = 0.004

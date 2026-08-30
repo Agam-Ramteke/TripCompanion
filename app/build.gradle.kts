@@ -33,6 +33,9 @@ val openRouteServiceApiKey: String =
     localProperties.getProperty("OPENROUTESERVICE_API_KEY").orEmpty().trim()
 val mapTilerApiKey: String = localProperties.getProperty("MAPTILER_API_KEY").orEmpty().trim()
 val geoapifyApiKey: String = localProperties.getProperty("GEOAPIFY_API_KEY").orEmpty().trim()
+val cartoApiKey: String = localProperties.getProperty("CARTO_API_KEY").orEmpty().trim()
+val protomapsApiKey: String = localProperties.getProperty("PROTOMAPS_API_KEY").orEmpty().trim()
+val locationIqApiKey: String = localProperties.getProperty("LOCATIONIQ_API_KEY").orEmpty().trim()
 
 android {
     namespace = "com.tripcompanion.app"
@@ -42,8 +45,8 @@ android {
         applicationId = "com.tripcompanion.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 3
-        versionName = "3.0"
+        versionCode = 4
+        versionName = "3.0.5"
 
         testInstrumentationRunner = "com.tripcompanion.app.HiltTestRunner"
 
@@ -52,6 +55,9 @@ android {
         buildConfigField("String", "OPENROUTESERVICE_API_KEY", "\"$openRouteServiceApiKey\"")
         buildConfigField("String", "MAPTILER_API_KEY", "\"$mapTilerApiKey\"")
         buildConfigField("String", "GEOAPIFY_API_KEY", "\"$geoapifyApiKey\"")
+        buildConfigField("String", "CARTO_API_KEY", "\"$cartoApiKey\"")
+        buildConfigField("String", "PROTOMAPS_API_KEY", "\"$protomapsApiKey\"")
+        buildConfigField("String", "LOCATIONIQ_API_KEY", "\"$locationIqApiKey\"")
 
         ksp {
             arg("room.schemaLocation", "$projectDir/schemas")
@@ -125,7 +131,8 @@ dependencies {
     // Navigation
     implementation(libs.androidx.navigation.compose)
 
-    // Map (OpenStreetMap - no API keys required, full pan/zoom/caching)
+    // Map (MapLibre Native Vector Engine + OpenStreetMap)
+    implementation(libs.maplibre.android)
     implementation(libs.osmdroid.android)
 
     // Coil Image Loading

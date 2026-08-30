@@ -133,6 +133,9 @@ class InMemoryTripDatabase {
             trips.value = trips.value.map { if (it.id == trip.id) trip else it }
         }
 
+        override suspend fun findTripByNameAndStartDate(name: String, startDate: java.time.LocalDate): TripEntity? =
+            trips.value.firstOrNull { it.name.trim().equals(name.trim(), ignoreCase = true) && it.startDate == startDate }
+
         override suspend fun deleteTrip(trip: TripEntity) = deleteTripById(trip.id)
 
         override suspend fun deleteTripById(id: Long) {
@@ -252,6 +255,21 @@ class InMemoryTripDatabase {
             locations.value = locations.value.map {
                 if (it.id == id) it.copy(isSaved = saved, updatedAt = updatedAt) else it
             }
+        }
+
+        override suspend fun findLocationByName(name: String): LocationEntity? =
+            locations.value.firstOrNull { it.name.trim().equals(name.trim(), ignoreCase = true) }
+
+        override suspend fun deduplicateLocations() {
+            val seen = mutableSetOf<String>()
+            val toKeep = mutableListOf<LocationEntity>()
+            locations.value.forEach { loc ->
+                val key = loc.name.trim().lowercase()
+                if (seen.add(key)) {
+                    toKeep.add(loc)
+                }
+            }
+            locations.value = toKeep
         }
 
         override suspend fun setVisited(id: Long, visited: Boolean, updatedAt: LocalDateTime) {
@@ -408,6 +426,17 @@ class InMemoryTripDatabase {
             if (trains.value.none { it.id == train.id }) return
             trains.value = trains.value.map { if (it.id == train.id) train else it }
         }
+
+        override suspend fun findTrainByNumberAndDeparture(
+            tripId: Long,
+            trainNumber: String,
+            departureTime: LocalDateTime
+        ): TrainEntity? =
+            trains.value.firstOrNull {
+                it.tripId == tripId &&
+                it.number.trim().equals(trainNumber.trim(), ignoreCase = true) &&
+                it.departureTime == departureTime
+            }
 
         override suspend fun deleteTrainById(id: Long) = cascadeDeleteTrain(id)
 

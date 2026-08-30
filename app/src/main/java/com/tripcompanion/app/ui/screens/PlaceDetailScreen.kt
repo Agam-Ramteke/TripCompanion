@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -87,7 +88,12 @@ fun PlaceDetailScreen(
     val context = LocalContext.current
 
     if (state.isLoading) {
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Box(
+            Modifier
+                .fillMaxSize()
+                .statusBarsPadding(),
+            contentAlignment = Alignment.Center
+        ) {
             CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
         }
         return
@@ -98,6 +104,7 @@ fun PlaceDetailScreen(
         Box(
             Modifier
                 .fillMaxSize()
+                .statusBarsPadding()
                 .padding(horizontal = metrics.screenPadding),
             contentAlignment = Alignment.Center
         ) {
@@ -131,6 +138,7 @@ fun PlaceDetailScreen(
                     onClick = onNavigateBack,
                     modifier = Modifier
                         .align(Alignment.TopStart)
+                        .statusBarsPadding()
                         .padding(metrics.screenPadding),
                     tint = MaterialTheme.colorScheme.onSurface,
                     background = MaterialTheme.colorScheme.surface,
@@ -143,6 +151,7 @@ fun PlaceDetailScreen(
                     onClick = viewModel::toggleSaved,
                     modifier = Modifier
                         .align(Alignment.TopEnd)
+                        .statusBarsPadding()
                         .padding(metrics.screenPadding),
                     tint = if (place.isSaved) {
                         AppThemeExtended.colors.accent

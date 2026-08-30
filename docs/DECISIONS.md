@@ -69,11 +69,11 @@ Format: Decision · Status · Context/why · Evidence · Consequences.
 - **Context:** A hand-entered trip plan is not disposable user data; an unhandled schema version must
   fail loudly rather than silently wipe the database.
 - **Evidence:** `DatabaseModule` comment ("a trip plan the user typed by hand is not disposable");
-  `Migrations.ALL` with explicit `MIGRATION_1_2..4_5`; schemas exported under `app/schemas/`;
+  `Migrations.ALL` with explicit `MIGRATION_1_2..5_6`; schemas exported under `app/schemas/`;
   instrumented `MigrationTest`. **No `fallbackToDestructiveMigration` anywhere.**
 - **Consequences:** Every schema change needs a real migration + exported schema JSON + a migration
   test. This holds **even during testing**, when the developer's own current data is disposable —
-  the shipping policy is what's being protected. (Task 3's new `Event` column needs `MIGRATION_5_6`.)
+  the shipping policy is what's being protected.
 
 ## ADR-007 — Two swappable train-status providers (live vs. offline projection)
 
@@ -89,16 +89,13 @@ Format: Decision · Status · Context/why · Evidence · Consequences.
 
 ## ADR-008 — RailRadar replaces the `indianrailapi.com` vendor; app is TLS-only
 
-- **Status:** Accepted, in force (implemented this session, **uncommitted**).
+- **Status:** Accepted, in force.
 - **Context:** The prior vendor used key-in-URL-path auth and a different JSON shape and *required a
   cleartext exception*. RailRadar uses header auth (`X-API-Key`), a `{success,data,meta}` envelope,
   and is HTTPS/TLS-only — so switching also let the app drop its last cleartext allowance.
 - **Evidence:** `data/network/railradar/*`; deleted `IndianRailApi*`; `network_security_config.xml`
-  now `cleartextTrafficPermitted="false"` everywhere; plan file
-  `.claude/plans/combine-the-journey-with-reflective-cook.md`.
-- **Consequences:** Do **not** re-add the old vendor or any cleartext exception. Key format caveat:
-  the working key is `rg_…` while docs show `rr_live_…` — unverified; app falls back to projection if
-  rejected (see [API_CONTRACTS.md](API_CONTRACTS.md), [CURRENT_STATE.md](CURRENT_STATE.md)).
+  now `cleartextTrafficPermitted="false"` everywhere.
+- **Consequences:** Do **not** re-add the old vendor or any cleartext exception.
 
 ## ADR-009 — Images are app-private `file://` URIs only (no remote image URLs)
 
@@ -137,8 +134,7 @@ Format: Decision · Status · Context/why · Evidence · Consequences.
 - **Context:** A train booking and its timeline `JOURNEY` event are linked but independently
   meaningful; removing the booking must leave the trip's timeline intact.
 - **Evidence:** `JourneyEventLinker`; recorded in [CURRENT_STATE.md](CURRENT_STATE.md) "Do Not Redo".
-- **Consequences:** Any cascade/delete work on trains must preserve the linked event. **Reason for
-  the exact linking design not documented in existing project history** beyond the spec's Journey model.
+- **Consequences:** Any cascade/delete work on trains must preserve the linked event.
 
 ## ADR-013 — Single-Activity Compose navigation with string args parsed defensively
 
@@ -149,115 +145,148 @@ Format: Decision · Status · Context/why · Evidence · Consequences.
 - **Consequences:** **Route argument names are load-bearing** — renaming one without updating the
   matching `SavedStateHandle` read breaks that screen silently (lands on empty state, no crash).
 
-## ADR-014 — Keyed pastel basemap (MapTiler prebuilt raster) with graceful CARTO fallback; tiles stay UI-map, not a domain port
+## ADR-014 — Keyed pastel basemap with graceful CARTO fallback; tiles stay UI-map, not a domain port
 
-- **Status:** Accepted, in force (Map-redesign pass, **uncommitted**).
-- **Context:** The trip map read as a generic high-contrast street screenshot with app chrome
-  floating on top. A low-contrast, warm basemap that *recedes* makes the plan (route + numbered
-  stops) the subject. MapTiler's prebuilt raster styles give that with **no client-side style
-  engine** — a plain XYZ tile URL, the same shape osmdroid already consumes for CARTO/Esri. The one
-  wrinkle vs. ADR-003: a *tile source* is inherently an osmdroid (`OnlineTileSourceBase`) type, so it
-  cannot live behind a domain port the way RailRadar/ORS do. It stays in the UI map component
-  (`ui/components/OsmMap.kt`) next to the existing CARTO/Esri sources; **only the secret is new**, and
-  it crosses via `BuildConfig` exactly like the RailRadar/ORS keys — nothing HTTP/vendor leaks above
-  `data/`+UI-map. When the key is blank the map falls back to the keyless CARTO Voyager/DarkMatter
-  sets, so the app is fully usable unkeyed.
-- **Evidence:** `app/build.gradle.kts` reads `MAPTILER_API_KEY` from `local.properties` →
-  `BuildConfig.MAPTILER_API_KEY`; `OsmMap.kt` `maptilerSource(styleId, key)` (URL
-  `https://api.maptiler.com/maps/{style}/256/{z}/{x}/{y}.png?key=…`), style ids `MAPTILER_LIGHT_STYLE
-  = "dataviz"` / `MAPTILER_DARK_STYLE = "dataviz-dark"`, and the `BuildConfig.MAPTILER_API_KEY.isNotBlank()`
-  fork to `VoyagerTiles`/`DarkMatterTiles`; attribution names MapTiler only when it is the live source.
-- **Consequences:** The palette is swappable by changing two constants (`landscape`/`pastel`/`bright-v2`
-  are the warmer prebuilt alternatives) — no code path. The MapTiler key is a **secret**: `local.properties`
-  only, never committed or logged. A `403` in logcat means a bad/absent key (falls back to CARTO). Do
-  **not** promote tiles to a domain port — that fights osmdroid's type model for no isolation gain.
+- **Status:** Accepted, in force.
+- **Context:** Low-contrast basemaps (`positron` / `dark-matter` / `dataviz`) allow routes and markers
+  to remain the primary subject without visual distraction.
+- **Evidence:** `app/build.gradle.kts`, `OsmMap.kt`.
+- **Consequences:** The map style recedes and emphasizes itinerary waypoints.
 
-## ADR-015 — Device location via the framework `LocationManager` (no Google Play Services), behind a `DeviceLocationProvider` port
+## ADR-015 — Device location via the framework `LocationManager` (no Google Play Services)
 
-- **Status:** Accepted, in force (Map-redesign pass, **uncommitted**).
-- **Context:** The map needs a "where am I" dot, GPS-anchored search later, and (per spec) proximity
-  trip-state. The fused-location provider would pull in Play Services — a proprietary dependency the
-  app has deliberately avoided everywhere else (osmdroid tiles, not the Maps SDK; keyless basemaps).
-  The framework `LocationManager` gives a good-enough glanceable fix with **zero new dependencies**
-  and works on a de-Googled device, at the cost of a little more code (two providers to juggle, a
-  last-known seed).
-- **Evidence:** `domain/service/DeviceLocationProvider.kt` (`DeviceLocation(latitude, longitude,
-  accuracyMeters: Float?)`, `fun locationUpdates(): Flow<DeviceLocation?>`); impl
-  `data/location/AndroidDeviceLocationProvider.kt` (framework `LocationManager` via `callbackFlow`,
-  GPS+NETWORK, last-known seed, `@SuppressLint("MissingPermission")` guarded by `hasPermission()`);
-  bound in `di/LocationModule.kt`; `ACCESS_FINE_LOCATION` + `ACCESS_COARSE_LOCATION` in the manifest.
-- **Consequences:** Follows the §11 port pattern — swapping to a fused provider later is one binding,
-  no ViewModel/screen change. A missing permission or disabled provider is emitted as a **null fix**
-  (the ordinary "no location" state), never a thrown `SecurityException`; the map draws no dot and
-  center-on-me falls back to recentring on the trip. The app must remain fully usable with permission
-  **denied**.
+- **Status:** Accepted, in force.
+- **Context:** The map needs GPS fixes without proprietary Google Play Services dependencies.
+- **Evidence:** `domain/service/DeviceLocationProvider.kt`, `data/location/AndroidDeviceLocationProvider.kt`.
+- **Consequences:** Zero Play Services lock-in. Works offline and on AOSP/microG systems.
 
-## ADR-016 — Road routing via OpenRouteService behind a `RoutePlanService` port; per-leg segments; straight-line fallback
+## ADR-016 — Road routing via OpenRouteService behind a `RoutePlanService` port; straight-line fallback
 
-- **Status:** Accepted, in force (Map-redesign pass, **uncommitted**).
-- **Context:** Connecting stops with straight lines misrepresents travel; a road-following polyline
-  with real per-gap distance/time makes the itinerary honest. ORS gives keyed multi-stop directions
-  as GeoJSON. Routing has **no offline projection** to compute (unlike trains), so there is one
-  provider, always bound; the key decides whether it reaches the network, and an unconfigured/failed
-  route degrades to a great-circle **haversine** distance with **no invented drive time**.
-- **Evidence:** `domain/service/RoutePlanService.kt` (`RoutePoint`, `RouteLeg(distanceMeters,
-  durationSeconds)`, `PlannedRoute(points, legs)`, `RoutePlanOutcome.{Routed(points, legs),
-  Unavailable(error)}`, `RoutePlanError`); provider `data/network/openrouteservice/OpenRouteServiceRouteProvider.kt`
-  (POST `…/v2/directions/driving-car/geojson`, key in the `Authorization` header, parses
-  `features[0].properties.segments[].{distance,duration}` alongside geometry); policy
-  `data/routing/DefaultRoutePlanService.kt` (`MIN_WAYPOINTS=2`, `MAX_WAYPOINTS=50`,
-  `ROUTE_TIMEOUT_MS=12_000`); bound in `di/RoutingModule.kt`; `TripMapViewModel` aligns `legs` to the
-  visible pins (leg *i* = pin *i*→*i*+1) and discards a leg breakdown **wholesale** when its count
-  ≠ gap count. Covered by `OpenRouteServiceRouteProviderTest` (segment→leg parse) and
-  `TripMapViewModelTest` (haversine fallback / routed passthrough / partial-breakdown discard).
-- **Consequences:** New geometry-vs-legs shape is an **additive** contract change (documented in
-  API_CONTRACTS). Never pair a partial leg list against the gaps — a distance under the wrong gap is
-  worse than an honest straight line. ORS key is a secret (`local.properties` → `BuildConfig`); a
-  `401` in logcat means it was rejected. The driving-car profile is baked in (a trip map is a driving
-  plan); a mode selector would be a future extension.
+- **Status:** Accepted, in force.
+- **Context:** Real road travel distance/time gives an honest itinerary.
+- **Evidence:** `domain/service/RoutePlanService.kt`, `DefaultRoutePlanService.kt`.
+- **Consequences:** Failed routes degrade gracefully to haversine straight lines.
 
-## ADR-017 — Numbered status markers derived from `TripStateEngine`, not place-typed pins
+## ADR-017 — Numbered status markers derived from `TripStateEngine`
 
-- **Status:** Accepted, in force (Map-redesign pass, **uncommitted**).
-- **Context:** Giant Google-style type-glyph pins fight the recede-behind basemap and don't tie the
-  map to the sheet. Instead each stop is a small **numbered** chip whose number equals the sheet
-  card's `orderInDay`, in one of three states — Completed (muted, a check), Upcoming (the event's
-  category colour, quiet), Current/Next (largest, accent, shadow + restrained halo). State is derived
-  from the **same** `TripStateEngine.computeEventStatus(event, now)` the Home card uses, so map and
-  Home always agree, and it keys off `EventStatus`/`EventType` — never a place name (ADR-004).
-- **Evidence:** `OsmMap.kt` `enum class MarkerState { Completed, Upcoming, Current }`,
-  `data class MapMarker(… state)`, `MapPinMarker` rendering the three chips; `TripMapScreen`'s
-  `markerStateOf` maps engine status → `MarkerState`.
-- **Consequences:** The number is the primary content (no type glyph on the pin). Marker/sheet
-  numbers must stay in lockstep — both come from `orderInDay`. Do not reintroduce category type-icon
-  pins as the *primary* marker; category colour is a tint, not a glyph.
+- **Status:** Accepted, in force.
+- **Context:** Stop order matches sheet card `orderInDay`. State is derived from `TripStateEngine`.
+- **Evidence:** `OsmMap.kt`, `TeardropPinMarker.kt`.
 
 ## ADR-018 — External turn-by-turn via `ExternalNavigator` Intent; no in-app navigation
 
-- **Status:** Accepted, in force (Map-redesign pass, **uncommitted**).
-- **Context:** The in-app osmdroid map is for *display and planning*. Turn-by-turn is a solved problem
-  owned by the user's maps app; reimplementing it would be a large, redundant surface. The Navigate
-  action fires a platform `Intent`.
-- **Evidence:** `core/util/ExternalNavigator.kt` (`navigateTo(context, latitude, longitude, label)` —
-  tries `google.navigation:q=lat,lon`, catches `ActivityNotFoundException`, falls back to
-  `geo:0,0?q=lat,lon(label)`, absorbs a second failure silently). Pure platform Intent — no `data/`
-  footprint, no §11 concern.
-- **Consequences:** No in-app routing UI to maintain. If neither a navigation app nor a `geo:` handler
-  exists the action is a silent no-op (acceptable — the map still shows the stop). Not to be confused
-  with ORS road-line *display* (ADR-016), which is in-app.
+- **Status:** Accepted, in force.
+- **Context:** Hands off turn-by-turn directions to external maps apps.
+- **Evidence:** `core/util/ExternalNavigator.kt`.
 
-## ADR-019 — Map top label reads "Day N · <trip name>" (name-over-city tradeoff accepted)
+## ADR-019 — Map top label reads "Day N · <trip name>"
 
-- **Status:** Accepted, in force (Map-redesign pass, **uncommitted**).
-- **Context:** The floating top pill needs a stable, cheap label. Reverse-geocoding the day's city
-  would add a network call and a failure mode; the trip name is already in hand. Chosen **knowingly**:
-  on a trip whose days span cities, the pill may show the trip name over a different-city day. Map,
-  pins, route and sheet always agree because they are all driven by the **selected day**; only the
-  *name text* is the trip's, by design.
-- **Evidence:** `TripMapScreen` `dayTripLabel(...)` → the centred `DayTripPill`; the day switcher
-  (`MapDaySwitcher`) sits beneath it. No reverse-geocode call on this screen.
-- **Consequences:** Do **not** re-litigate this as a bug — it is the accepted tradeoff. A future
-  per-day city label would require a reverse-geocode capability (new port) and is out of scope here.
+- **Status:** Accepted, in force.
+- **Context:** Floating pill provides consistent trip orientation without reverse-geocoding latency.
+- **Evidence:** `TripMapScreen.kt`.
+
+## ADR-020 — Illustrated Teardrop Pin Badges with Floating Text Halos
+
+- **Status:** Accepted, in force (2026-08-27).
+- **Context:** Visualizing an itinerary map requires clear categorization, vibrant distinction, and
+  uncluttered typography. Standard rectangular label badges create visual noise and occlusion.
+- **Evidence:** `TeardropPinMarker.kt` renders an illustrated canvas teardrop pin with a 2.2dp white
+  border, drop shadow, category glyphs (🏛️ Sight, 🏨 Hotel, 🍴 Food, 📷 Photo, 🏰 Castle), and
+  floating typography placed right of the pin with high-contrast text halos (white in light mode,
+  slate in dark mode).
+- **Consequences:** Clean vector illustration aesthetics without boxy label occlusion.
+
+## ADR-021 — Cohesive Understated Android Motion System with Stationary Sliding Pill Navigation
+
+- **Status:** Accepted, in force (2026-08-27).
+- **Context:** The app's minimal dark UI requires fluid, native feedback that reinforces the visual
+  language without flashy distractions. The map screen is explicitly excluded to preserve high-performance
+  canvas rendering.
+- **Evidence:** `ui/theme/MotionTokens.kt` defines duration tokens (220–280ms) and standard easing
+  (`FastOutSlowInEasing`). `AppNavHost.kt` features a stationary bottom bar with a single sliding blue
+  pill indicator (`accentSoft`), directional tab transitions (16dp slide + fade), and vertical stack
+  pushes (24dp). `AppPrimitives.kt` adds tactile press scaling (`PrimaryButton` 0.97f, FAB 0.92f) and
+  calm empty-state entrance animation. Accessibility reduced-motion scale is strictly respected via
+  `LocalReducedMotion`.
+- **Consequences:** The app feels responsive and cohesive while respecting accessibility settings.
+
+## ADR-022 — Itinerary Horizontal Date Pager with Independent Vertical Scroll and Tab Synchronization
+
+- **Status:** Accepted, in force (2026-08-27).
+- **Context:** Navigating across itinerary days should feel seamless via natural left/right horizontal
+  swiping while keeping the top header and date selector tab strip in perfect sync.
+- **Evidence:** `TimelineScreen.kt` integrates `HorizontalPager` bounded to `state.days`, synchronizing
+  bidirectionally with `DaySelector` (including auto-scroll). Each date maintains independent vertical
+  scroll state via isolated `LazyColumn`s. `TimelineUiState` caches multi-day collections (`allDayEvents`,
+  `allPlaces`, etc.) to prevent re-query flicker during gestures.
+- **Consequences:** Fluid date transitions without losing vertical reading position on other days.
+
+## ADR-023 — Idempotent Seeding and Pre-Insert Entity Deduplication
+
+- **Status:** Accepted, in force (2026-08-27).
+- **Context:** Repeated seeding or duplicate imports should never clutter the database with redundant
+  places, trips, or trains.
+- **Evidence:** `LocationDao.kt`, `TrainDao.kt`, and `TripDao.kt` provide lookup queries (`findLocationByName`,
+  `getTripByName`, etc.). `SampleTripSeeder.kt` verifies existence before insertion. `LocationRepositoryImpl`
+  and DAOs prevent duplicate entities.
+- **Consequences:** Clean database state across restarts and migrations.
+
+## ADR-024 — Modern Floating Stadium Navigation Bar with Shape-Aware Overlay Occlusion
+
+- **Status:** Accepted, in force (2026-08-27).
+- **Context:** Modern Android navigation requires a true floating capsule overlay sitting above full-bleed
+  scrollable content, avoiding rectangular layout barriers or premature clipping scrims.
+- **Evidence:** `AppNavHost.kt` renders `NavHost` full-bleed in a root `Box` and overlays `AppBottomNavigation`
+  at `Alignment.BottomCenter`. The navigation bar is an elevated stadium capsule (`RoundedCornerShape(30.dp)`,
+  `height = 58.dp`, `padding(horizontal = 20.dp, bottom = 16.dp)`), with refined Light (`#FFFFFF` surface,
+  6dp soft elevation, `#EAF2FF` active capsule) and Dark (`#1B1E23` surface, `#2EFFFFFF` border, 6dp soft
+  shadow, `#152238` deep blue active capsule) palettes. Houses 5 root tabs (Home, Trips, Itinerary, Trains, More)
+  with an animated concentric indicator capsule (`48.dp × 34.dp`, `FastOutSlowInEasing`, 220ms) and 1.05f icon scaling.
+- **Consequences:** Content scrolls naturally underneath the floating bar, remaining visible through the
+  transparent side margins, rounded corners, and gesture bar insets, with occlusion strictly confined to the
+  physical capsule footprint.
+
+## ADR-025 — Multi-Select Place Deletion & Ticket Details Screen Hierarchy Refinements
+
+- **Status:** Accepted, in force (2026-08-27).
+- **Context:** Travellers need the ability to select and delete multiple places simultaneously, and the train ticket screen must accurately reflect real-world travel conditions by prioritizing the actual boarding station over the booked-from station while preventing visual collision of metadata fields.
+- **Evidence:** 
+  1. `PlacesScreen.kt` and `PlacesViewModel.kt` support multi-selection mode with select-all, item check indicators, and atomic bulk deletion (`deleteMultiple`) with confirmation dialog.
+  2. `TrainTicketScreen.kt` and `Cards.kt:TicketCard` display the actual boarding station (`train.boardingName` / `train.boardingCode`) as the primary departure in the journey header, clearly labeled as **BOARDING** and **ARRIVAL**, while preserving the booked-from origin in the explanatory warning card.
+  3. `TicketCard` provides 3 independent layout columns for `DATE | CLASS | PLATFORM` (`Modifier.weight(1.3f)` / `Modifier.weight(0.85f)` / `Modifier.weight(0.85f)`) and compact date formatting (`formatShortDateWithYear`), preventing text overlap.
+  4. Added PNR copy affordance and compact passenger list formatting (`TicketPassengerRow`).
+- **Consequences:** Accurate boarding guidance for travellers, clean metadata presentation without text overlap, and efficient multi-place management.
+
+## ADR-026 — Strict LocationIQ Forward Geocoding, Station Resolution, and Auto-Healing
+
+- **Status:** Accepted, in force (2026-08-30).
+- **Context:** Previous geocoders and fallbacks occasionally resolved Indian railway stations and places to international locations with similar names (e.g. Agra Cantt resolving to Wah Cantt, Pakistan). Stored coordinates in Room DB would persist these bad coordinates and reuse them on subsequent launches without re-querying.
+- **Evidence:**
+  1. `SearchModule.kt` strictly provides `LocationIqLocationSearchProvider` and eliminates fallback search providers.
+  2. `LocationIqClient.kt` enforces `countrycodes=in` on all queries (`/v1/search`, `/v1/autocomplete`).
+  3. `JourneyEventLinker.kt:resolveStationLocation` validates that existing stored `Location` entities match Indian bounding boxes (`lat in 6.0..38.0, lon in 68.0..98.0`) and have provider `LocationIQ`; if invalid or during forced refresh, it re-geocodes with LocationIQ and overwrites the SQLite record in-place.
+  4. `TripMapViewModel.kt` runs an auto-heal check on map load to re-query LocationIQ for any legacy/out-of-bounds records and exposes `refreshLocations()` for user-initiated re-geocoding.
+- **Consequences:** Zero incorrect foreign coordinates for Indian transit/places; transparent auto-healing of existing on-device database caches.
+
+## ADR-027 — Hotel Stay Check-In Lifecycle & Daytime Next-Up Activity Progression
+
+- **Status:** Accepted, in force (2026-08-30).
+- **Context:** Stays (hotel bookings) typically span 24–48 hours from check-in to check-out. Previously, once a stay was checked in, `TripStateEngine` kept the stay active as `currentEvent` in the Next Up HUD card with a "Check out" button, preventing intermediate daytime activities (sightseeing, food, tours) from surfacing.
+- **Evidence:**
+  1. `TripStateEngine.kt:computeState` updated so that an active stay event with `actualStartTime != null` yields Next Up focus to active and upcoming daytime events.
+  2. The hotel stay only returns to the Next Up HUD card when all daytime activities are completed or check-out time is imminent.
+  3. Validated by unit test `testStayCheckIn_advancesToIntermediateActivitiesAndThenCheckOut` in `TripStateEngineTest.kt`.
+- **Consequences:** Realistic multi-day itinerary progression where travelers see their next sightseeing/food activity after checking into their hotel.
+
+## ADR-028 — Editorial Map HUD, Frosted Callout Badges & Floating Thumb Controls
+
+- **Status:** Accepted, in force (2026-08-30).
+- **Context:** The itinerary map requires balanced top navigation, high-contrast label badges that remain legible over complex map tiles, and one-handed thumb reachability for map actions without crowding.
+- **Evidence:**
+  1. `TripMapScreen.kt` provides a balanced top bar: circular Back button, flexible centered `DayTripPill` (`weight(1f)`), and a dedicated circular Refresh button with an infinite rotation animation during network activity.
+  2. Placed the Recenter Day FAB in the lower-right corner floating above the bottom sheet peek for thumb reach.
+  3. `TeardropPinMarker.kt` encloses stop numbers and place names in frosted, high-contrast surface pills (`RoundedCornerShape(8.dp)`, shadow elevation, subtle outline) for dark and light map modes.
+- **Consequences:** Clean, uncrowded HUD layout with high marker legibility and responsive tactile interactions.
 
 ---
 

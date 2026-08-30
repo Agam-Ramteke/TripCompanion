@@ -9,6 +9,9 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -16,13 +19,20 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CheckCircleOutline
+import androidx.compose.material.icons.filled.Checklist
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.Place
+import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.SearchOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -33,6 +43,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -52,9 +63,7 @@ import com.tripcompanion.app.ui.theme.AppThemeExtended
 /**
  * Every place, in the three lists a traveller actually keeps.
  *
- * The screen this replaces held eight hardcoded literals and a bookmark that did nothing.
- * Both toggles here write a column, so a place saved on this screen is still saved after a
- * reboot — and the counts on the tabs come from the same three queries that fill them.
+ * Supports multi-selection for bulk deleting places as well as individual management.
  */
 @Composable
 fun PlacesScreen(
@@ -66,19 +75,30 @@ fun PlacesScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val metrics = AppThemeExtended.metrics
 
+    var isSelectionMode by remember { mutableStateOf(false) }
+    var selectedPlaceIds by remember { mutableStateOf(setOf<Long>()) }
+    var showBulkDeleteConfirm by remember { mutableStateOf(false) }
+
     // Held here rather than in the row so the confirm survives the row scrolling off screen,
     // and so only one place can be mid-removal at a time.
     var pendingRemove by remember { mutableStateOf<Location?>(null) }
 
     if (state.isLoading) {
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Box(
+            Modifier
+                .fillMaxSize()
+                .statusBarsPadding(),
+            contentAlignment = Alignment.Center
+        ) {
             CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
         }
         return
     }
 
     LazyColumn(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier
+            .fillMaxSize()
+            .statusBarsPadding(),
         contentPadding = PaddingValues(
             start = metrics.screenPadding,
             end = metrics.screenPadding,
@@ -88,38 +108,101 @@ fun PlacesScreen(
         verticalArrangement = Arrangement.spacedBy(metrics.rowGap)
     ) {
         item("header") {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                AppIconButton(
-                    icon = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = "Back",
-                    onClick = onNavigateBack,
-                    size = 44.dp
-                )
-                Spacer(Modifier.width(12.dp))
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        text = "Places",
-                        style = MaterialTheme.typography.headlineSmall,
-                        color = MaterialTheme.colorScheme.onBackground
+            if (isSelectionMode) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        AppIconButton(
+                            icon = Icons.Default.Close,
+                            contentDescription = "Cancel selection",
+                            onClick = {
+                                isSelectionMode = false
+                                selectedPlaceIds = emptySet()
+                            },
+                            size = 44.dp
+                        )
+                        Spacer(Modifier.width(12.dp))
+                        Text(
+                            text = "${selectedPlaceIds.size} selected",
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                            color = MaterialTheme.colorScheme.onBackground
+                        )
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        TextButton(
+                            onClick = {
+                                selectedPlaceIds = if (selectedPlaceIds.size == state.places.size && state.places.isNotEmpty()) {
+                                    emptySet()
+                                } else {
+                                    state.places.map { it.id }.toSet()
+                                }
+                            }
+                        ) {
+                            Text(
+                                text = if (selectedPlaceIds.size == state.places.size && state.places.isNotEmpty()) "Deselect all" else "Select all",
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                        Spacer(Modifier.width(4.dp))
+                        AppIconButton(
+                            icon = Icons.Default.Delete,
+                            contentDescription = "Delete selected",
+                            onClick = {
+                                if (selectedPlaceIds.isNotEmpty()) {
+                                    showBulkDeleteConfirm = true
+                                }
+                            },
+                            tint = if (selectedPlaceIds.isNotEmpty()) AppThemeExtended.colors.danger else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+                            size = 44.dp
+                        )
+                    }
+                }
+            } else {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    AppIconButton(
+                        icon = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Back",
+                        onClick = onNavigateBack,
+                        size = 44.dp
                     )
-                    Text(
-                        text = subtitleFor(state),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    Spacer(Modifier.width(12.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            text = "Places",
+                            style = MaterialTheme.typography.headlineSmall,
+                            color = MaterialTheme.colorScheme.onBackground
+                        )
+                        Text(
+                            text = subtitleFor(state),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    if (state.places.isNotEmpty()) {
+                        AppIconButton(
+                            icon = Icons.Default.Checklist,
+                            contentDescription = "Select multiple places",
+                            onClick = { isSelectionMode = true },
+                            size = 44.dp
+                        )
+                        Spacer(Modifier.width(8.dp))
+                    }
+                    AppIconButton(
+                        icon = Icons.Default.Add,
+                        contentDescription = "Add a place",
+                        onClick = onNavigateToAddPlace,
+                        tint = MaterialTheme.colorScheme.onPrimary,
+                        background = MaterialTheme.colorScheme.primary,
+                        borderColor = null,
+                        size = 44.dp
                     )
                 }
-                AppIconButton(
-                    icon = Icons.Default.Add,
-                    contentDescription = "Add a place",
-                    onClick = onNavigateToAddPlace,
-                    tint = MaterialTheme.colorScheme.onPrimary,
-                    background = MaterialTheme.colorScheme.primary,
-                    borderColor = null,
-                    size = 44.dp
-                )
             }
         }
 
@@ -185,14 +268,53 @@ fun PlacesScreen(
         }
 
         items(state.places, key = { it.id }) { place ->
+            val isSelected = selectedPlaceIds.contains(place.id)
             PlaceRow(
                 place = place,
+                isSelectionMode = isSelectionMode,
+                isSelected = isSelected,
                 onOpen = { onNavigateToPlaceDetail(place.id) },
+                onSelectToggle = {
+                    selectedPlaceIds = if (isSelected) {
+                        selectedPlaceIds - place.id
+                    } else {
+                        selectedPlaceIds + place.id
+                    }
+                },
                 onToggleSaved = { viewModel.toggleSaved(place) },
                 onToggleVisited = { viewModel.toggleVisited(place) },
                 onRemove = { pendingRemove = place }
             )
         }
+    }
+
+    // Bulk Delete Confirmation Dialog
+    if (showBulkDeleteConfirm && selectedPlaceIds.isNotEmpty()) {
+        val count = selectedPlaceIds.size
+        AlertDialog(
+            onDismissRequest = { showBulkDeleteConfirm = false },
+            title = { Text("Remove $count ${if (count == 1) "place" else "places"}?") },
+            text = {
+                Text(
+                    "They will leave every list — to visit, visited and saved. Anything on your " +
+                        "itinerary that points here keeps its plan but loses its pin on the " +
+                        "map. This can't be undone."
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.deleteMultiple(selectedPlaceIds)
+                    selectedPlaceIds = emptySet()
+                    isSelectionMode = false
+                    showBulkDeleteConfirm = false
+                }) {
+                    Text("Remove ($count)", color = AppThemeExtended.colors.danger)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showBulkDeleteConfirm = false }) { Text("Keep") }
+            }
+        )
     }
 
     pendingRemove?.let { place ->
@@ -222,54 +344,81 @@ fun PlacesScreen(
 }
 
 /**
- * A card plus the one line that changes its list.
- *
- * "Been there" is the whole point of the Visited tab, and burying it in the detail screen
- * means a place gets ticked off days later or never.
+ * A card plus the actions that change its list or selection state.
  */
 @Composable
 private fun PlaceRow(
     place: Location,
+    isSelectionMode: Boolean,
+    isSelected: Boolean,
     onOpen: () -> Unit,
+    onSelectToggle: () -> Unit,
     onToggleSaved: () -> Unit,
     onToggleVisited: () -> Unit,
     onRemove: () -> Unit
 ) {
+    val colors = AppThemeExtended.colors
+
     Column {
-        PlaceCard(
-            name = place.name,
-            imageUri = place.photoUri,
-            category = place.category.takeIf { it.isNotBlank() },
-            rating = place.rating,
-            openingHours = place.openingHours.takeIf { it.isNotBlank() },
-            isSaved = place.isSaved,
-            onToggleSaved = onToggleSaved,
-            statusLabel = if (place.isVisited) "Visited" else null,
-            statusTone = BadgeTone.POSITIVE,
-            onClick = onOpen
-        )
-        Spacer(Modifier.height(2.dp))
-        // The two things you do to a place from the list: move it between lists, or take it
-        // off them for good. Remove is set apart on the right and coloured as a warning so
-        // it isn't tapped by reflex on the way to "Been there".
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            TextActionButton(
-                text = if (place.isVisited) "Not been there after all" else "Been there",
-                onClick = onToggleVisited,
-                icon = if (place.isVisited) Icons.AutoMirrored.Filled.Undo else Icons.Default.CheckCircleOutline
-            )
-            TextActionButton(
-                text = "Remove",
-                onClick = onRemove,
-                icon = Icons.Default.DeleteOutline,
-                color = AppThemeExtended.colors.dangerText
-            )
+            if (isSelectionMode) {
+                IconButton(
+                    onClick = onSelectToggle,
+                    modifier = Modifier
+                        .padding(end = 4.dp)
+                        .size(40.dp)
+                ) {
+                    Icon(
+                        imageVector = if (isSelected) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
+                        contentDescription = if (isSelected) "Selected" else "Not selected",
+                        tint = if (isSelected) colors.accent else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+            }
+
+            Box(Modifier.weight(1f)) {
+                PlaceCard(
+                    name = place.name,
+                    imageUri = place.photoUri,
+                    category = place.category.takeIf { it.isNotBlank() },
+                    rating = place.rating,
+                    openingHours = place.openingHours.takeIf { it.isNotBlank() },
+                    isSaved = place.isSaved,
+                    onToggleSaved = if (isSelectionMode) null else onToggleSaved,
+                    statusLabel = if (place.isVisited) "Visited" else null,
+                    statusTone = BadgeTone.POSITIVE,
+                    borderColor = if (isSelectionMode && isSelected) colors.accent else MaterialTheme.colorScheme.outline,
+                    borderWidth = if (isSelectionMode && isSelected) 2.dp else AppThemeExtended.metrics.borderWidth,
+                    onClick = if (isSelectionMode) onSelectToggle else onOpen
+                )
+            }
         }
-        Spacer(Modifier.height(4.dp))
+
+        if (!isSelectionMode) {
+            Spacer(Modifier.height(2.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                TextActionButton(
+                    text = if (place.isVisited) "Not been there after all" else "Been there",
+                    onClick = onToggleVisited,
+                    icon = if (place.isVisited) Icons.AutoMirrored.Filled.Undo else Icons.Default.CheckCircleOutline
+                )
+                TextActionButton(
+                    text = "Remove",
+                    onClick = onRemove,
+                    icon = Icons.Default.DeleteOutline,
+                    color = AppThemeExtended.colors.dangerText
+                )
+            }
+            Spacer(Modifier.height(4.dp))
+        }
     }
 }
 

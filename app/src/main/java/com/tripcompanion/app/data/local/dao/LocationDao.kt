@@ -44,9 +44,16 @@ interface LocationDao {
     @Query("SELECT * FROM locations WHERE isSaved = 1 ORDER BY name ASC")
     fun getSavedPlaces(): Flow<List<LocationEntity>>
 
+    @Query("SELECT * FROM locations WHERE LOWER(TRIM(name)) = LOWER(TRIM(:name)) LIMIT 1")
+    suspend fun findLocationByName(name: String): LocationEntity?
+
+    @Query("DELETE FROM locations WHERE id NOT IN (SELECT MIN(id) FROM locations GROUP BY LOWER(TRIM(name)))")
+    suspend fun deduplicateLocations()
+
     @Query("UPDATE locations SET isSaved = :saved, updatedAt = :updatedAt WHERE id = :id")
     suspend fun setSaved(id: Long, saved: Boolean, updatedAt: LocalDateTime)
 
     @Query("UPDATE locations SET isVisited = :visited, updatedAt = :updatedAt WHERE id = :id")
     suspend fun setVisited(id: Long, visited: Boolean, updatedAt: LocalDateTime)
 }
+

@@ -12,21 +12,17 @@ import com.tripcompanion.app.domain.repository.PlannedPhotoRepository
 import com.tripcompanion.app.domain.repository.TrainRepository
 import com.tripcompanion.app.domain.repository.TripRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import javax.inject.Inject
 
 /**
  * What each destination in the hub actually holds.
- *
- * A menu of five words is a table of contents; these counts are what make it a screen. They
- * also keep it honest — the Hotel row can say there is no stay booked instead of leading to an
- * empty screen, and the Map row counts exactly what the map will draw.
  */
 data class MoreUiState(
     val trip: Trip? = null,
@@ -44,10 +40,7 @@ data class MoreUiState(
 }
 
 /**
- * The counts behind the hub.
- *
- * Everything here is read from the repositories the destination screens read, so a row can
- * never advertise a number the screen it opens disagrees with.
+ * The counts behind the hub, reactively listening to database state.
  */
 @HiltViewModel
 class MoreViewModel @Inject constructor(
@@ -58,53 +51,49 @@ class MoreViewModel @Inject constructor(
     private val plannedPhotoRepository: PlannedPhotoRepository
 ) : ViewModel() {
 
-    private val _state = MutableStateFlow(MoreUiState())
-    val state: StateFlow<MoreUiState> = _state.asStateFlow()
-
-    init {
-        viewModelScope.launch {
-            val trips = tripRepository.getAllTrips().first()
-            val trip = trips.firstOrNull { it.status == TripStatus.ACTIVE } ?: trips.firstOrNull()
-
-            if (trip == null) {
-                // Places and Saved still work with no trip at all, so their counts are still
-                // collected — only the trip-scoped rows go quiet.
-                locationRepository.getAllLocations().collect { places ->
-                    _state.update {
-                        it.copy(
-                            toVisitCount = places.count { place -> !place.isVisited },
-                            visitedCount = places.count { place -> place.isVisited },
-                            savedCount = places.count { place -> place.isSaved },
-                            isLoading = false
-                        )
-                    }
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val state: StateFlow<MoreUiState> = tripRepository.getAllTrips()
+        .flatMapLatest { trips ->
+            val activeTrip = trips.firstOrNull { it.status == TripStatus.ACTIVE } ?: trips.firstOrNull()
+            if (activeTrip == null) {
+                locationRepository.getAllLocations().map { places ->
+                    MoreUiState(
+                        trip = null,
+                        toVisitCount = places.count { !it.isVisited },
+                        visitedCount = places.count { it.isVisited },
+                        savedCount = places.count { it.isSaved },
+                        isLoading = false
+                    )
                 }
-                return@launch
+            } else {
+                combine(
+                    tripRepository.getTripById(activeTrip.id),
+                    eventRepository.getEventsForTrip(activeTrip.id),
+                    locationRepository.getAllLocations(),
+                    trainRepository.getTrainsForTrip(activeTrip.id),
+                    plannedPhotoRepository.countForTrip(activeTrip.id)
+                ) { current, events, places, trains, photoPlans ->
+                    val byId = places.associateBy { it.id }
+                    MoreUiState(
+                        trip = current ?: activeTrip,
+                        mappedStopCount = events.count { event ->
+                            val place = event.locationId?.let { byId[it] }
+                            place != null && GeoUtils.hasPosition(place.latitude, place.longitude)
+                        },
+                        stayCount = events.count { it.type == EventType.STAY },
+                        toVisitCount = places.count { !it.isVisited },
+                        visitedCount = places.count { it.isVisited },
+                        savedCount = places.count { it.isSaved },
+                        trainCount = trains.size,
+                        photoPlanCount = photoPlans,
+                        isLoading = false
+                    )
+                }
             }
-
-            combine(
-                tripRepository.getTripById(trip.id),
-                eventRepository.getEventsForTrip(trip.id),
-                locationRepository.getAllLocations(),
-                trainRepository.getTrainsForTrip(trip.id),
-                plannedPhotoRepository.countForTrip(trip.id)
-            ) { current, events, places, trains, photoPlans ->
-                val byId = places.associateBy { it.id }
-                _state.value.copy(
-                    trip = current ?: trip,
-                    mappedStopCount = events.count { event ->
-                        val place = event.locationId?.let { byId[it] }
-                        place != null && GeoUtils.hasPosition(place.latitude, place.longitude)
-                    },
-                    stayCount = events.count { it.type == EventType.STAY },
-                    toVisitCount = places.count { !it.isVisited },
-                    visitedCount = places.count { it.isVisited },
-                    savedCount = places.count { it.isSaved },
-                    trainCount = trains.size,
-                    photoPlanCount = photoPlans,
-                    isLoading = false
-                )
-            }.collect { next -> _state.update { next } }
         }
-    }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = MoreUiState(isLoading = true)
+        )
 }

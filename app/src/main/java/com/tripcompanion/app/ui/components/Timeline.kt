@@ -28,15 +28,19 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.tripcompanion.app.domain.model.EventStatus
 import com.tripcompanion.app.domain.model.EventType
 import java.time.LocalDate
@@ -82,8 +86,17 @@ fun DaySelector(
 ) {
     val colors = AppThemeExtended.colors
     val metrics = AppThemeExtended.metrics
+    val lazyListState = androidx.compose.foundation.lazy.rememberLazyListState()
+
+    val selectedIndex = remember(days, selected) { days.indexOfFirst { it.date == selected } }
+    LaunchedEffect(selectedIndex) {
+        if (selectedIndex >= 0) {
+            lazyListState.animateScrollToItem((selectedIndex - 1).coerceAtLeast(0))
+        }
+    }
 
     LazyRow(
+        state = lazyListState,
         modifier = modifier.fillMaxWidth(),
         contentPadding = contentPadding,
         horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -279,23 +292,38 @@ fun TimelineItem(
     time: String,
     type: EventType,
     modifier: Modifier = Modifier,
+    eventLabel: String? = null,
     status: EventStatus? = null,
+    statusLabel: String? = null,
+    statusTone: BadgeTone = BadgeTone.INFO,
     isFirst: Boolean = false,
     isLast: Boolean = false,
     nodeSize: Dp = AppThemeExtended.metrics.timelineNodeSize,
     content: @Composable ColumnScope.() -> Unit
 ) {
+    val colors = AppThemeExtended.colors
     val metrics = AppThemeExtended.metrics
     val railColor = MaterialTheme.colorScheme.outline
     val nodeColor = type.color
-    // "Done" drains the node's colour so a completed day recedes and the live stop stands
-    // out — the rail's job is to show progress, not to shout every stop equally.
     val isSpent = status == EventStatus.COMPLETED || status == EventStatus.SKIPPED
+    val isActive = status == EventStatus.ACTIVE
 
-    // `IntrinsicSize.Min` is what makes the rail work. The rail's lower segment fills the
-    // leftover vertical space with `weight`, and weight needs a bounded height — without
-    // this the row would wrap its content, the segment would measure zero, and the line
-    // would break between every stop.
+    val nodeBg = when {
+        isSpent -> MaterialTheme.colorScheme.surfaceVariant
+        isActive -> type.color
+        else -> type.softColor
+    }
+    val nodeBorder = when {
+        isSpent -> BorderStroke(metrics.borderWidth, railColor)
+        isActive -> BorderStroke(metrics.borderWidthStrong, colors.accent)
+        else -> BorderStroke(metrics.borderWidth, nodeColor.copy(alpha = 0.45f))
+    }
+    val iconTint = when {
+        isSpent -> MaterialTheme.colorScheme.onSurfaceVariant
+        isActive -> Color.White
+        else -> nodeColor
+    }
+
     Row(
         modifier
             .fillMaxWidth()
@@ -308,28 +336,21 @@ fun TimelineItem(
             Box(
                 Modifier
                     .width(metrics.timelineRailWidth)
-                    .height(if (isFirst) 0.dp else 8.dp)
+                    .height(if (isFirst) 0.dp else 6.dp)
                     .background(railColor)
             )
             Surface(
                 shape = CircleShape,
-                color = if (isSpent) MaterialTheme.colorScheme.surfaceVariant else type.softColor,
-                border = BorderStroke(
-                    metrics.borderWidthStrong,
-                    if (isSpent) railColor else nodeColor
-                ),
+                color = nodeBg,
+                border = nodeBorder,
                 modifier = Modifier.size(nodeSize)
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Icon(
                         type.icon,
                         contentDescription = null,
-                        tint = if (isSpent) {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        } else {
-                            nodeColor
-                        },
-                        modifier = Modifier.size(nodeSize * 0.46f)
+                        tint = iconTint,
+                        modifier = Modifier.size(nodeSize * 0.48f)
                     )
                 }
             }
@@ -350,18 +371,45 @@ fun TimelineItem(
                 .weight(1f)
                 .padding(bottom = if (isLast) 0.dp else metrics.rowGap)
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = time,
-                    style = AppThemeExtended.text.time,
-                    color = if (isSpent) {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    } else {
-                        nodeColor
-                    }
-                )
-                if (status != null) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = time,
+                        style = AppThemeExtended.text.timeLarge.copy(
+                            fontWeight = FontWeight.SemiBold
+                        ),
+                        maxLines = 1,
+                        color = if (isSpent) {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        } else {
+                            nodeColor
+                        }
+                    )
                     Spacer(Modifier.width(8.dp))
+                    Text(
+                        text = eventLabel ?: type.label.uppercase(),
+                        style = MaterialTheme.typography.labelMedium.copy(
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 0.5.sp
+                        ),
+                        maxLines = 1,
+                        color = if (isSpent) {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        } else {
+                            nodeColor
+                        }
+                    )
+                }
+                Spacer(Modifier.width(8.dp))
+                if (statusLabel != null) {
+                    StatusBadge(label = statusLabel, tone = statusTone)
+                } else if (status != null) {
                     StatusBadge(status = status)
                 }
             }

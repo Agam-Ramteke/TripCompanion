@@ -37,6 +37,9 @@ object DateTimeUtils {
     /** "21 Aug" */
     fun formatShortDate(date: LocalDate): String = date.format(SHORT_DATE_FORMATTER)
 
+    /** "21 Aug 2026" */
+    fun formatShortDateWithYear(date: LocalDate): String = date.format(SHORT_DATE_YEAR_FORMATTER)
+
     /** "Friday, 21 August" */
     fun formatDayAndDate(date: LocalDate): String = date.format(DAY_AND_DATE_FORMATTER)
 
@@ -177,4 +180,46 @@ object DateTimeUtils {
     /** The inverse, for seeding a DatePicker. */
     fun localDateToEpochMillis(date: LocalDate): Long =
         date.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
+
+    /**
+     * Formats a live countdown with dynamic precision:
+     * - > 48h: "11 days to go"
+     * - 24–48h: "1d 7h 23m"
+     * - < 24h: "18h 42m"
+     * - < 1h: "42m 18s"
+     * - <= 0: "Trip starts now"
+     */
+    fun formatLiveCountdown(
+        targetDateTime: LocalDateTime,
+        currentDateTime: LocalDateTime,
+        zeroText: String = "Trip starts now"
+    ): String {
+        val totalSeconds = ChronoUnit.SECONDS.between(currentDateTime, targetDateTime)
+        if (totalSeconds <= 0L) {
+            return zeroText
+        }
+        val totalMinutes = totalSeconds / 60
+        val totalHours = totalMinutes / 60
+        val days = totalHours / 24
+
+        return when {
+            totalHours >= 48L -> {
+                val daysToGo = (totalHours + 23L) / 24L
+                if (daysToGo <= 1L) "1 day to go" else "$daysToGo days to go"
+            }
+            totalHours in 24L..47L -> {
+                val remHours = totalHours % 24L
+                val remMinutes = totalMinutes % 60L
+                "${days}d ${remHours}h ${remMinutes}m"
+            }
+            totalHours in 1L..23L -> {
+                val remMinutes = totalMinutes % 60L
+                "${totalHours}h ${remMinutes}m"
+            }
+            else -> {
+                val remSeconds = totalSeconds % 60L
+                "${totalMinutes}m ${remSeconds}s"
+            }
+        }
+    }
 }

@@ -6,6 +6,8 @@ import com.tripcompanion.app.domain.model.Train
 import com.tripcompanion.app.domain.model.TrainRunSource
 import com.tripcompanion.app.domain.model.TrainRunStatus
 import com.tripcompanion.app.domain.model.TrainStop
+import com.tripcompanion.app.domain.model.EventStatus
+import com.tripcompanion.app.domain.repository.EventRepository
 import com.tripcompanion.app.domain.repository.TrainRepository
 import com.tripcompanion.app.domain.service.TrainScheduleOutcome
 import com.tripcompanion.app.domain.service.TrainStatusError
@@ -56,6 +58,7 @@ class DefaultTrainStatusService @Inject constructor(
      */
     private val projection: ScheduleProjectionTrainStatusProvider,
     private val repository: TrainRepository,
+    private val eventRepository: EventRepository,
     private val timeProvider: TimeProvider
 ) : TrainStatusService {
 
@@ -86,6 +89,9 @@ class DefaultTrainStatusService @Inject constructor(
                 provider.fetchStatus(train, schedule)
             }
             repository.saveRunStatus(status)
+            if (status.source == TrainRunSource.LIVE) {
+                checkAndApplyArrival(train, status)
+            }
             TrainStatusOutcome.Updated(status)
         } catch (e: TimeoutCancellationException) {
             // Must be caught before CancellationException: withTimeout signals a timeout by
@@ -193,6 +199,47 @@ class DefaultTrainStatusService @Inject constructor(
         val from = train.departureTime.minusMinutes(LIVE_LEAD_MINUTES)
         val until = train.arrivalTime.plusHours(LIVE_TRAIL_HOURS)
         return !now.isBefore(from) && !now.isAfter(until)
+    }
+
+    private suspend fun checkAndApplyArrival(train: Train, status: TrainRunStatus) {
+        val destStop = status.stops.firstOrNull { it.stationCode.equals(train.destinationCode, ignoreCase = true) }
+        val isArrived = status.hasArrived || (destStop != null && (destStop.isDeparted || destStop.actualArrival != null))
+
+        if (isArrived && train.actualArrivalTime == null) {
+            val arrivalTime = if (destStop?.actualArrival != null) {
+                val stopDate = status.runDate.plusDays(destStop.dayOffset.toLong())
+                LocalDateTime.of(stopDate, destStop.actualArrival)
+            } else {
+                status.fetchedAt
+            }
+
+            val originStop = status.stops.firstOrNull { it.stationCode.equals(train.originCode, ignoreCase = true) }
+            val actualDep = if (train.actualDepartureTime == null && originStop?.actualDeparture != null) {
+                val originDate = status.runDate.plusDays(originStop.dayOffset.toLong())
+                LocalDateTime.of(originDate, originStop.actualDeparture)
+            } else {
+                train.actualDepartureTime
+            }
+
+            val updatedTrain = train.copy(
+                actualArrivalTime = arrivalTime,
+                actualDepartureTime = actualDep,
+                arrivalSource = "API"
+            )
+            repository.updateTrain(updatedTrain)
+
+            if (train.eventId != null) {
+                val event = eventRepository.getEventByIdOnce(train.eventId)
+                if (event != null && event.status != EventStatus.COMPLETED) {
+                    eventRepository.updateEvent(
+                        event.copy(
+                            status = EventStatus.COMPLETED,
+                            actualEndTime = arrivalTime
+                        )
+                    )
+                }
+            }
+        }
     }
 
     companion object {

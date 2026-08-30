@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -36,8 +37,13 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -45,14 +51,25 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.tripcompanion.app.core.util.DateTimeUtils
 import com.tripcompanion.app.domain.model.EventStatus
 import com.tripcompanion.app.domain.model.TripStatus
 import com.tripcompanion.app.ui.theme.AppThemeExtended
+import com.tripcompanion.app.ui.theme.LocalReducedMotion
+import com.tripcompanion.app.ui.theme.MotionTokens
+import com.tripcompanion.app.ui.theme.fabPressFeedback
+import com.tripcompanion.app.ui.theme.pressFeedback
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import java.time.LocalDateTime
+import java.time.temporal.ChronoUnit
 
 // ═══════════════════════════════════════════════════════════════════════════════
 //  Containers
@@ -79,7 +96,8 @@ fun AppCard(
     contentPadding: PaddingValues = PaddingValues(AppThemeExtended.metrics.cardPadding),
     content: @Composable ColumnScope.() -> Unit
 ) {
-    val drawnElevation = if (AppThemeExtended.colors.isDark) 0.dp else elevation
+    val isDark = AppThemeExtended.colors.isDark
+    val drawnElevation = if (isDark) 0.dp else elevation
 
     Surface(
         shape = shape,
@@ -89,7 +107,13 @@ fun AppCard(
             .then(if (fillWidth) Modifier.fillMaxWidth() else Modifier)
             .then(
                 if (drawnElevation > 0.dp) {
-                    Modifier.shadow(drawnElevation, shape, clip = false)
+                    Modifier.shadow(
+                        elevation = drawnElevation,
+                        shape = shape,
+                        clip = false,
+                        spotColor = Color(0x16000000),
+                        ambientColor = Color(0x0A000000)
+                    )
                 } else {
                     Modifier
                 }
@@ -280,9 +304,7 @@ private const val DISABLED_ALPHA = 0.4f
 /**
  * The screen's main action — save, create, confirm, book.
  *
- * Blue fill, white label, sentence case. A disabled button keeps its shape, its footprint
- * and its position and only loses presence, so a keystroke that flips validity cannot
- * shift the layout under the thumb already reaching for it.
+ * Eucalyptus fill, white label, sentence case. Tactile elevation and press animation.
  */
 @Composable
 fun PrimaryButton(
@@ -296,6 +318,8 @@ fun PrimaryButton(
     contentColor: Color = MaterialTheme.colorScheme.onPrimary
 ) {
     val metrics = AppThemeExtended.metrics
+    val isDark = AppThemeExtended.colors.isDark
+    val interactionSource = remember { MutableInteractionSource() }
 
     Surface(
         shape = metrics.buttonShape,
@@ -304,7 +328,26 @@ fun PrimaryButton(
             .fillMaxWidth()
             .height(metrics.controlHeight)
             .alpha(if (enabled) 1f else DISABLED_ALPHA)
-            .then(if (enabled && !busy) Modifier.clickable(onClick = onClick) else Modifier)
+            .then(
+                if (!isDark && enabled) {
+                    Modifier.shadow(
+                        elevation = 2.dp,
+                        shape = metrics.buttonShape,
+                        spotColor = Color(0x24000000),
+                        ambientColor = Color(0x0C000000)
+                    )
+                } else Modifier
+            )
+            .pressFeedback(interactionSource, scaleOnPress = 0.97f)
+            .then(
+                if (enabled && !busy) {
+                    Modifier.clickable(
+                        interactionSource = interactionSource,
+                        indication = ripple(),
+                        onClick = onClick
+                    )
+                } else Modifier
+            )
     ) {
         Box(contentAlignment = Alignment.Center) {
             if (busy) {
@@ -351,6 +394,7 @@ fun SecondaryButton(
     borderColor: Color = MaterialTheme.colorScheme.outline
 ) {
     val metrics = AppThemeExtended.metrics
+    val interactionSource = remember { MutableInteractionSource() }
 
     Surface(
         shape = metrics.buttonShape,
@@ -360,7 +404,16 @@ fun SecondaryButton(
             .fillMaxWidth()
             .height(metrics.controlHeight)
             .alpha(if (enabled) 1f else DISABLED_ALPHA)
-            .then(if (enabled) Modifier.clickable(onClick = onClick) else Modifier)
+            .pressFeedback(interactionSource, scaleOnPress = 0.98f)
+            .then(
+                if (enabled) {
+                    Modifier.clickable(
+                        interactionSource = interactionSource,
+                        indication = ripple(),
+                        onClick = onClick
+                    )
+                } else Modifier
+            )
     ) {
         Box(contentAlignment = Alignment.Center) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -398,13 +451,19 @@ fun AppIconButton(
     borderColor: Color? = MaterialTheme.colorScheme.outline,
     size: Dp = 40.dp
 ) {
+    val interactionSource = remember { MutableInteractionSource() }
     Surface(
         shape = CircleShape,
         color = background,
         border = borderColor?.let { BorderStroke(AppThemeExtended.metrics.borderWidth, it) },
         modifier = modifier
             .size(size)
-            .clickable(onClick = onClick)
+            .fabPressFeedback(interactionSource, scaleOnPress = 0.92f)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = ripple(bounded = false, radius = size / 2),
+                onClick = onClick
+            )
     ) {
         Box(contentAlignment = Alignment.Center) {
             Icon(
@@ -880,6 +939,46 @@ fun CountdownBadge(
 }
 
 /**
+ * Returns a live-updating countdown string for [targetDateTime], formatted
+ * with dynamic precision tiers:
+ * - > 48h: "11 days to go"
+ * - 24–48h: "1d 7h 23m"
+ * - < 24h: "18h 42m"
+ * - < 1h: "42m 18s"
+ * - <= 0: [zeroText] ("Trip starts now")
+ *
+ * Ticks every second when < 1 hour remaining, and on minute boundaries otherwise.
+ */
+@Composable
+fun rememberLiveCountdown(
+    targetDateTime: LocalDateTime?,
+    zeroText: String = "Trip starts now"
+): String {
+    if (targetDateTime == null) return ""
+    var countdownText by remember(targetDateTime) {
+        mutableStateOf(DateTimeUtils.formatLiveCountdown(targetDateTime, LocalDateTime.now(), zeroText))
+    }
+
+    LaunchedEffect(targetDateTime) {
+        while (isActive) {
+            val now = LocalDateTime.now()
+            val totalSeconds = ChronoUnit.SECONDS.between(now, targetDateTime)
+            countdownText = DateTimeUtils.formatLiveCountdown(targetDateTime, now, zeroText)
+            if (totalSeconds <= 0L) {
+                break
+            }
+            if (totalSeconds <= 3600L) {
+                delay(1000L)
+            } else {
+                val delayMillis = (60 - now.second) * 1000L
+                delay(delayMillis.coerceIn(1000L, 60000L))
+            }
+        }
+    }
+    return countdownText
+}
+
+/**
  * A determinate progress bar — trip completion, a train's distance covered.
  *
  * Animates so a two-minute refresh reads as movement rather than a jump.
@@ -990,6 +1089,50 @@ fun EmptyState(
     secondaryActionLabel: String? = null,
     onSecondaryAction: (() -> Unit)? = null
 ) {
+    val reducedMotion = com.tripcompanion.app.ui.theme.LocalReducedMotion.current
+    var appeared by remember { mutableStateOf(reducedMotion) }
+    LaunchedEffect(Unit) {
+        if (!reducedMotion) {
+            appeared = true
+        }
+    }
+
+    val iconScale by animateFloatAsState(
+        targetValue = if (appeared) 1.0f else 0.90f,
+        animationSpec = tween(
+            durationMillis = com.tripcompanion.app.ui.theme.MotionTokens.EMPTY_STATE_ENTER_DURATION,
+            easing = com.tripcompanion.app.ui.theme.MotionTokens.StandardEasing
+        ),
+        label = "emptyIconScale"
+    )
+    val iconAlpha by animateFloatAsState(
+        targetValue = if (appeared) 1.0f else 0.0f,
+        animationSpec = tween(
+            durationMillis = com.tripcompanion.app.ui.theme.MotionTokens.EMPTY_STATE_ENTER_DURATION,
+            easing = com.tripcompanion.app.ui.theme.MotionTokens.StandardEasing
+        ),
+        label = "emptyIconAlpha"
+    )
+
+    val contentAlpha by animateFloatAsState(
+        targetValue = if (appeared) 1.0f else 0.0f,
+        animationSpec = tween(
+            durationMillis = com.tripcompanion.app.ui.theme.MotionTokens.CONTENT_ENTER_DURATION,
+            delayMillis = 50,
+            easing = com.tripcompanion.app.ui.theme.MotionTokens.StandardEasing
+        ),
+        label = "emptyContentAlpha"
+    )
+    val contentOffsetY by animateFloatAsState(
+        targetValue = if (appeared) 0f else 8f,
+        animationSpec = tween(
+            durationMillis = com.tripcompanion.app.ui.theme.MotionTokens.CONTENT_ENTER_DURATION,
+            delayMillis = 50,
+            easing = com.tripcompanion.app.ui.theme.MotionTokens.StandardEasing
+        ),
+        label = "emptyContentOffsetY"
+    )
+
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -999,7 +1142,13 @@ fun EmptyState(
         Surface(
             shape = CircleShape,
             color = AppThemeExtended.colors.accentSoft,
-            modifier = Modifier.size(72.dp)
+            modifier = Modifier
+                .size(72.dp)
+                .graphicsLayer {
+                    scaleX = iconScale
+                    scaleY = iconScale
+                    alpha = iconAlpha
+                }
         ) {
             Box(contentAlignment = Alignment.Center) {
                 Icon(
@@ -1011,30 +1160,40 @@ fun EmptyState(
             }
         }
         Spacer(Modifier.height(20.dp))
-        Text(
-            text = title,
-            style = MaterialTheme.typography.titleLarge,
-            color = MaterialTheme.colorScheme.onBackground
-        )
-        Spacer(Modifier.height(6.dp))
-        Text(
-            text = message,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.fillMaxWidth(),
-            textAlign = androidx.compose.ui.text.style.TextAlign.Center
-        )
-        if (actionLabel != null && onAction != null) {
-            Spacer(Modifier.height(24.dp))
-            PrimaryButton(
-                text = actionLabel,
-                onClick = onAction,
-                modifier = Modifier.width(220.dp)
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .graphicsLayer {
+                    alpha = contentAlpha
+                    translationY = contentOffsetY * density
+                },
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleLarge,
+                color = MaterialTheme.colorScheme.onBackground
             )
-        }
-        if (secondaryActionLabel != null && onSecondaryAction != null) {
-            Spacer(Modifier.height(10.dp))
-            TextActionButton(text = secondaryActionLabel, onClick = onSecondaryAction)
+            Spacer(Modifier.height(6.dp))
+            Text(
+                text = message,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.fillMaxWidth(),
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+            )
+            if (actionLabel != null && onAction != null) {
+                Spacer(Modifier.height(24.dp))
+                PrimaryButton(
+                    text = actionLabel,
+                    onClick = onAction,
+                    modifier = Modifier.width(220.dp)
+                )
+            }
+            if (secondaryActionLabel != null && onSecondaryAction != null) {
+                Spacer(Modifier.height(10.dp))
+                TextActionButton(text = secondaryActionLabel, onClick = onSecondaryAction)
+            }
         }
     }
 }

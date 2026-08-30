@@ -42,6 +42,8 @@ fun EventEntity.toDomain() = Event(
     backgroundImageUri = backgroundImageUri,
     status = EventStatus.valueOf(status),
     order = order,
+    actualStartTime = actualStartTime,
+    actualEndTime = actualEndTime,
     createdAt = createdAt,
     updatedAt = updatedAt
 )
@@ -59,6 +61,8 @@ fun Event.toEntity() = EventEntity(
     backgroundImageUri = backgroundImageUri,
     status = status.name,
     order = order,
+    actualStartTime = actualStartTime,
+    actualEndTime = actualEndTime,
     createdAt = createdAt,
     updatedAt = updatedAt
 )
@@ -167,6 +171,10 @@ fun TrainEntity.toDomain(passengers: List<TrainPassenger> = emptyList()) = Train
     destinationName = destinationName,
     departureTime = departureTime,
     arrivalTime = arrivalTime,
+    actualBoardingTime = actualBoardingTime,
+    actualDepartureTime = actualDepartureTime,
+    actualArrivalTime = actualArrivalTime,
+    arrivalSource = arrivalSource,
     travelClass = travelClass,
     pnr = pnr,
     bookingStatus = TrainBookingStatus.valueOf(bookingStatus),
@@ -213,6 +221,10 @@ fun Train.toEntity() = TrainEntity(
     destinationName = destinationName,
     departureTime = departureTime,
     arrivalTime = arrivalTime,
+    actualBoardingTime = actualBoardingTime,
+    actualDepartureTime = actualDepartureTime,
+    actualArrivalTime = actualArrivalTime,
+    arrivalSource = arrivalSource,
     travelClass = travelClass,
     pnr = pnr,
     bookingStatus = bookingStatus.name,
@@ -244,8 +256,7 @@ fun Train.toEntity() = TrainEntity(
  * them and never re-parsed here.
  *
  * Reading [TrainAllotment] back out of `bookingStatusText` instead would make a hand-edited
- * berth silently revert to whatever the ticket said, and would make the round trip depend on
- * the parser still behaving the same way it did the day the row was written.
+ * ticket display whatever the regex guessed rather than what the user typed.
  */
 fun TrainPassengerEntity.toDomain() = TrainPassenger(
     id = id,
@@ -253,12 +264,12 @@ fun TrainPassengerEntity.toDomain() = TrainPassenger(
     serialNo = serialNo,
     name = name,
     age = age,
-    gender = PassengerGender.valueOf(gender),
+    gender = try { PassengerGender.valueOf(gender) } catch (e: Exception) { PassengerGender.UNSPECIFIED },
     allotment = TrainAllotment(
-        status = TrainBookingStatus.valueOf(status),
         coach = coach,
         berth = berth,
-        berthType = BerthType.valueOf(berthType),
+        berthType = try { BerthType.valueOf(berthType) } catch (e: Exception) { BerthType.UNKNOWN },
+        status = try { TrainBookingStatus.valueOf(status) } catch (e: Exception) { TrainBookingStatus.NOT_BOOKED },
         queuePosition = queuePosition,
         queueKind = queueKind
     ),
@@ -398,7 +409,9 @@ fun StayDetailsEntity.toDomain() = StayDetails(
     contactPhone = contactPhone,
     address = address,
     checkInInstructions = checkInInstructions,
-    photoUri = photoUri
+    photoUri = photoUri,
+    actualCheckIn = actualCheckIn,
+    actualCheckOut = actualCheckOut
 )
 
 fun StayDetails.toEntity() = StayDetailsEntity(
@@ -409,5 +422,7 @@ fun StayDetails.toEntity() = StayDetailsEntity(
     contactPhone = contactPhone,
     address = address,
     checkInInstructions = checkInInstructions,
-    photoUri = photoUri
+    photoUri = photoUri,
+    actualCheckIn = actualCheckIn,
+    actualCheckOut = actualCheckOut
 )

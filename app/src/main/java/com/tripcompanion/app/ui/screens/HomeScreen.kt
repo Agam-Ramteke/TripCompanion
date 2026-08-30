@@ -11,9 +11,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.AddCircleOutline
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CameraAlt
@@ -23,11 +26,15 @@ import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.Hotel
 import androidx.compose.material.icons.filled.Luggage
 import androidx.compose.material.icons.filled.Map
+import androidx.compose.material.icons.filled.NightsStay
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.WbSunny
+import androidx.compose.material.icons.outlined.MoreHoriz
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -39,12 +46,16 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.tripcompanion.app.core.util.DateTimeUtils
+import com.tripcompanion.app.core.util.TimeDeviationUtils
 import com.tripcompanion.app.domain.engine.TripPhase
 import com.tripcompanion.app.domain.engine.TripStats
 import com.tripcompanion.app.domain.model.Event
+import com.tripcompanion.app.domain.model.EventStatus
+import com.tripcompanion.app.domain.model.EventType
 import com.tripcompanion.app.domain.model.Location
 import com.tripcompanion.app.domain.model.Train
 import com.tripcompanion.app.domain.model.Trip
@@ -58,6 +69,7 @@ import com.tripcompanion.app.ui.components.AppProgressBar
 import com.tripcompanion.app.ui.components.BadgeTone
 import com.tripcompanion.app.ui.components.bookingSummary
 import com.tripcompanion.app.ui.components.CountdownBadge
+import com.tripcompanion.app.ui.components.rememberLiveCountdown
 import com.tripcompanion.app.ui.components.DayPlanStrip
 import com.tripcompanion.app.ui.components.EmptyState
 import com.tripcompanion.app.ui.components.FilterChipRow
@@ -110,14 +122,21 @@ fun HomeScreen(
     val metrics = AppThemeExtended.metrics
 
     if (state.isLoading) {
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Box(
+            Modifier
+                .fillMaxSize()
+                .statusBarsPadding(),
+            contentAlignment = Alignment.Center
+        ) {
             CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
         }
         return
     }
 
     LazyColumn(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier
+            .fillMaxSize()
+            .statusBarsPadding(),
         contentPadding = PaddingValues(
             start = metrics.screenPadding,
             end = metrics.screenPadding,
@@ -126,16 +145,15 @@ fun HomeScreen(
         ),
         verticalArrangement = Arrangement.spacedBy(metrics.sectionGap)
     ) {
-        item("greeting") {
-            GreetingHeader(
-                name = state.travellerName,
-                now = state.now,
-                onSettingsClick = onNavigateToSettings
-            )
-        }
-
         val trip = state.trip
         if (trip == null) {
+            item("greeting") {
+                GreetingHeader(
+                    name = state.travellerName,
+                    now = state.now,
+                    onSettingsClick = onNavigateToSettings
+                )
+            }
             item("empty") {
                 EmptyState(
                     icon = Icons.Default.Luggage,
@@ -164,10 +182,13 @@ fun HomeScreen(
         item("hero") {
             TripHero(
                 trip = trip,
+                travellerName = state.travellerName,
                 phase = state.tripState.currentTripState,
                 stats = state.stats,
                 progressFraction = state.tripState.progressPercent,
                 today = state.now,
+                tripStartDateTime = state.tripStartDateTime,
+                onSettingsClick = onNavigateToSettings,
                 onClick = { onNavigateToItinerary(trip.id) }
             )
         }
@@ -201,7 +222,16 @@ fun HomeScreen(
                         }
                     },
                     onDone = { viewModel.completeEvent(focus) },
-                    onSkip = { viewModel.skipEvent(focus) }
+                    onSkip = { viewModel.skipEvent(focus) },
+                    onReopen = { viewModel.reopenEvent(focus) },
+                    onBoardTrain = { tr, ev -> viewModel.boardTrain(tr, ev) },
+                    onUndoBoardTrain = { tr, ev -> viewModel.undoBoardTrain(tr, ev) },
+                    onArriveTrain = { tr, ev -> viewModel.arriveTrain(tr, ev) },
+                    onUndoArriveTrain = { tr, ev -> viewModel.undoArriveTrain(tr, ev) },
+                    onCheckInStay = { evId -> viewModel.checkInStay(evId) },
+                    onUndoCheckInStay = { evId -> viewModel.undoCheckInStay(evId) },
+                    onCheckOutStay = { evId -> viewModel.checkOutStay(evId) },
+                    onUndoCheckOutStay = { evId -> viewModel.undoCheckOutStay(evId) }
                 )
             }
         } else {
@@ -353,19 +383,26 @@ private fun TripSwitcher(
 @Composable
 private fun TripHero(
     trip: Trip,
+    travellerName: String,
     phase: TripPhase,
     stats: TripStats,
-    /**
-     * How much of the itinerary is done, 0f..1f.
-     *
-     * A fraction rather than a percentage because that is what the engine computes and what the
-     * bar draws; rounding to a whole number happens once, where it is written down.
-     */
     progressFraction: Float,
     today: LocalDateTime,
+    tripStartDateTime: LocalDateTime? = null,
+    onSettingsClick: () -> Unit,
     onClick: () -> Unit
 ) {
+    val liveCountdown = rememberLiveCountdown(
+        targetDateTime = tripStartDateTime ?: trip.startDate.atStartOfDay(),
+        zeroText = "Trip starts now"
+    )
     val metrics = AppThemeExtended.metrics
+    val greetingIcon = when (today.hour) {
+        in 5..16 -> Icons.Default.WbSunny
+        else -> Icons.Default.NightsStay
+    }
+    val greetingText = if (travellerName.isBlank()) greeting(today) else "${greeting(today)}, $travellerName"
+
     AppCard(
         onClick = onClick,
         contentPadding = PaddingValues(0.dp),
@@ -374,33 +411,92 @@ private fun TripHero(
         HeroImage(
             uri = trip.coverImageUri,
             contentDescription = trip.name,
-            height = 190.dp,
+            height = 230.dp,
             placeholderIcon = Icons.Default.Luggage,
             overlay = {
                 Column(
-                    Modifier
-                        .align(Alignment.BottomStart)
-                        .padding(16.dp)
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.SpaceBetween
                 ) {
-                    CountdownBadge(
-                        text = phaseLabel(trip, phase, stats, today),
-                        icon = Icons.Default.Schedule,
-                        tone = phaseTone(phase)
-                    )
-                    Spacer(Modifier.height(10.dp))
-                    Text(
-                        text = trip.name,
-                        style = MaterialTheme.typography.headlineMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Text(
-                        text = DateTimeUtils.formatDateRange(trip.startDate, trip.endDate),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Color.White.copy(alpha = 0.88f)
-                    )
+                    // Top row: Contextual greeting and Settings icon
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.Top
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    greetingIcon,
+                                    contentDescription = null,
+                                    tint = Color.White.copy(alpha = 0.92f),
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(Modifier.width(6.dp))
+                                Text(
+                                    text = greetingText,
+                                    style = MaterialTheme.typography.titleMedium.copy(
+                                        fontWeight = FontWeight.SemiBold,
+                                        fontSize = 15.sp
+                                    ),
+                                    color = Color.White,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                            Spacer(Modifier.height(2.dp))
+                            Text(
+                                text = DateTimeUtils.formatDayAndDate(today.toLocalDate()),
+                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp),
+                                color = Color.White.copy(alpha = 0.85f)
+                            )
+                        }
+                        Surface(
+                            shape = CircleShape,
+                            color = Color.White.copy(alpha = 0.92f),
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            IconButton(
+                                onClick = onSettingsClick,
+                                modifier = Modifier.fillMaxSize()
+                            ) {
+                                Icon(
+                                    Icons.Default.Settings,
+                                    contentDescription = "Settings",
+                                    tint = Color(0xFF1C1B1F),
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        }
+                    }
+
+                    // Bottom section: Countdown, Trip Title & Dates
+                    Column {
+                        CountdownBadge(
+                            text = if (phase == TripPhase.NOT_STARTED) liveCountdown else phaseLabel(trip, phase, stats, today),
+                            icon = Icons.Default.Schedule,
+                            tone = phaseTone(phase)
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            text = trip.name,
+                            style = MaterialTheme.typography.displayMedium.copy(
+                                fontSize = 28.sp,
+                                fontWeight = FontWeight.Bold
+                            ),
+                            color = Color.White,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Spacer(Modifier.height(2.dp))
+                        Text(
+                            text = DateTimeUtils.formatDateRange(trip.startDate, trip.endDate),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color.White.copy(alpha = 0.88f)
+                        )
+                    }
                 }
             }
         )
@@ -418,7 +514,7 @@ private fun TripHero(
                     color = MaterialTheme.colorScheme.primary
                 )
             }
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(8.dp))
             AppProgressBar(fraction = progressFraction)
         }
     }
@@ -479,15 +575,21 @@ private fun NextUpSection(
     now: LocalDateTime,
     onOpen: () -> Unit,
     onDone: () -> Unit,
-    onSkip: () -> Unit
+    onSkip: () -> Unit,
+    onReopen: () -> Unit = {},
+    onBoardTrain: (Train, Event) -> Unit = { _, _ -> },
+    onUndoBoardTrain: (Train, Event) -> Unit = { _, _ -> },
+    onArriveTrain: (Train, Event) -> Unit = { _, _ -> },
+    onUndoArriveTrain: (Train, Event) -> Unit = { _, _ -> },
+    onCheckInStay: (Long) -> Unit = {},
+    onUndoCheckInStay: (Long) -> Unit = {},
+    onCheckOutStay: (Long) -> Unit = {},
+    onUndoCheckOutStay: (Long) -> Unit = {}
 ) {
     val metrics = AppThemeExtended.metrics
     Column {
         SectionHeader(
             title = if (isNow) "Happening now" else "Next up",
-            // Both helpers word their own preposition — "in 20 m", "40 m left" — so the sentence
-            // around them supplies the verb and nothing else. Prefixing "In" or "Ends in" reads
-            // back as "In in 20 m".
             subtitle = if (isNow) {
                 DateTimeUtils.formatTimeRemaining(now, event.endTime)
                     .replaceFirstChar { it.uppercase() }
@@ -498,8 +600,6 @@ private fun NextUpSection(
         Spacer(Modifier.height(12.dp))
         AppMediaCard(onClick = onOpen) {
             Box {
-                // A train keeps a solid card so the ticket reads like a printed ticket; an activity
-                // wears its own photo — blurred and faded to a wash its ordinary type sits on.
                 if (train == null) {
                     PhotoBackdrop(
                         uri = imageUri,
@@ -508,6 +608,22 @@ private fun NextUpSection(
                 }
                 Column {
                     if (train != null) {
+                        val isBoarded = train.actualBoardingTime != null || event.actualStartTime != null
+                        val isArrived = train.actualArrivalTime != null || event.actualEndTime != null || event.status == EventStatus.COMPLETED
+
+                        val (statusText, statusBadgeTone) = when {
+                            isArrived -> {
+                                val stamp = train.actualArrivalTime ?: event.actualEndTime ?: train.arrivalTime
+                                TimeDeviationUtils.formatLifecycleBadge("Arrived", stamp, train.arrivalTime) to BadgeTone.POSITIVE
+                            }
+                            isBoarded -> {
+                                val stamp = train.actualBoardingTime ?: event.actualStartTime ?: train.departureTime
+                                TimeDeviationUtils.formatLifecycleBadge("Boarded", stamp, train.departureTime) to BadgeTone.POSITIVE
+                            }
+                            event.isDecided -> statusLabel(event.status) to statusTone(event.status)
+                            else -> null to BadgeTone.INFO
+                        }
+
                         TrainCard(
                             trainNumber = train.number,
                             trainName = trainDisplayName(train),
@@ -523,22 +639,8 @@ private fun NextUpSection(
                                 train.arrivalTime
                             ),
                             seatSummary = train.bookingSummary(),
-                            // A journey the user has ruled on says so; otherwise the badge is the
-                            // booking's own, which is what the Trains tab shows for it.
-                            statusLabel = if (event.isDecided) {
-                                statusLabel(event.status)
-                            } else {
-                                trainStatusLabel(train, now)
-                            },
-                            statusTone = if (event.isDecided) {
-                                statusTone(event.status)
-                            } else {
-                                trainStatusTone(train, now)
-                            },
-                            // Nested: the container owns the border, padding and elevation, so a
-                            // second surface with its own ring would read as a card inside a card —
-                            // and a transparent surface that still cast a shadow would show that
-                            // shadow through its own fill as a grey slab.
+                            statusLabel = statusText,
+                            statusTone = statusBadgeTone,
                             color = Color.Transparent,
                             borderWidth = 0.dp,
                             elevation = 0.dp
@@ -555,30 +657,99 @@ private fun NextUpSection(
                         )
                     }
 
-                    if (!event.isDecided) {
-                        Row(
-                            modifier = Modifier.padding(
-                                start = metrics.cardPadding,
-                                end = metrics.cardPadding,
-                                bottom = metrics.cardPadding,
-                                top = if (train == null) 16.dp else 0.dp
-                            ),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            PrimaryButton(
-                                text = "Mark done",
-                                onClick = onDone,
-                                icon = Icons.Default.CheckCircle,
-                                modifier = Modifier.weight(1f)
-                            )
-                            SecondaryButton(
-                                text = "Skip",
-                                onClick = onSkip,
-                                modifier = Modifier.weight(1f)
-                            )
+                    Row(
+                        modifier = Modifier.padding(
+                            start = metrics.cardPadding,
+                            end = metrics.cardPadding,
+                            bottom = metrics.cardPadding,
+                            top = if (train == null) 16.dp else 4.dp
+                        ),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        if (train != null) {
+                            val isArrived = train.actualArrivalTime != null || event.actualEndTime != null || event.status == EventStatus.COMPLETED
+                            val isBoarded = train.actualBoardingTime != null || event.actualStartTime != null
+                            if (isArrived) {
+                                SecondaryButton(
+                                    text = "Reopen",
+                                    onClick = { onUndoArriveTrain(train, event) },
+                                    icon = Icons.AutoMirrored.Filled.Undo,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            } else if (isBoarded) {
+                                PrimaryButton(
+                                    text = "Arrived",
+                                    onClick = { onArriveTrain(train, event) },
+                                    icon = Icons.Default.CheckCircle,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                SecondaryButton(
+                                    text = "Undo",
+                                    onClick = { onUndoBoardTrain(train, event) },
+                                    icon = Icons.AutoMirrored.Filled.Undo,
+                                    modifier = Modifier.weight(1f)
+                                )
+                            } else {
+                                PrimaryButton(
+                                    text = "Boarded",
+                                    onClick = { onBoardTrain(train, event) },
+                                    icon = Icons.Default.DirectionsTransit,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+                        } else if (event.type == EventType.STAY) {
+                            val isCheckedOut = event.actualEndTime != null || event.status == EventStatus.COMPLETED
+                            val isCheckedIn = event.actualStartTime != null
+                            if (isCheckedOut) {
+                                SecondaryButton(
+                                    text = "Reopen",
+                                    onClick = { onUndoCheckOutStay(event.id) },
+                                    icon = Icons.AutoMirrored.Filled.Undo,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            } else if (isCheckedIn) {
+                                PrimaryButton(
+                                    text = "Check out",
+                                    onClick = { onCheckOutStay(event.id) },
+                                    icon = Icons.Default.CheckCircle,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                SecondaryButton(
+                                    text = "Undo",
+                                    onClick = { onUndoCheckInStay(event.id) },
+                                    icon = Icons.AutoMirrored.Filled.Undo,
+                                    modifier = Modifier.weight(1f)
+                                )
+                            } else {
+                                PrimaryButton(
+                                    text = "Check in",
+                                    onClick = { onCheckInStay(event.id) },
+                                    icon = Icons.Default.Hotel,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+                        } else {
+                            if (event.isDecided) {
+                                SecondaryButton(
+                                    text = "Reopen",
+                                    onClick = onReopen,
+                                    icon = Icons.AutoMirrored.Filled.Undo,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            } else {
+                                PrimaryButton(
+                                    text = "Done",
+                                    onClick = onDone,
+                                    icon = Icons.Default.CheckCircle,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                SecondaryButton(
+                                    text = "Skip",
+                                    onClick = onSkip,
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
                         }
-                    } else {
-                        Spacer(Modifier.height(if (train == null) metrics.cardPadding else 0.dp))
                     }
                 }
             }

@@ -25,7 +25,9 @@ import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Hotel
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -38,9 +40,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.tripcompanion.app.domain.model.EventStatus
 import com.tripcompanion.app.domain.model.EventType
 import com.tripcompanion.app.domain.model.TripStatus
@@ -469,40 +475,38 @@ fun TicketCard(
 ) {
     val colors = AppThemeExtended.colors
     val metrics = AppThemeExtended.metrics
+    val clipboardManager = LocalClipboardManager.current
 
     AppCard(
         modifier = modifier,
         shape = metrics.cardShapeLarge,
         contentPadding = PaddingValues(0.dp)
     ) {
-        // Header: the train, on a coloured ground so the ticket has a "stub".
+        // Header: the train, with a balanced compact header and prominent journey section
         Column(
             Modifier
                 .fillMaxWidth()
                 .background(colors.accent)
-                .padding(AppThemeExtended.metrics.cardPadding)
+                .padding(horizontal = 16.dp, vertical = 14.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.Top
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 Column(Modifier.weight(1f)) {
-                    Eyebrow("Train", color = Color.White.copy(alpha = 0.75f))
+                    Eyebrow("TRAIN", color = Color.White.copy(alpha = 0.8f))
+                    Spacer(Modifier.height(1.dp))
                     Text(
-                        text = trainName,
-                        style = MaterialTheme.typography.titleLarge,
+                        text = if (trainName.contains(trainNumber)) trainName else "$trainName ($trainNumber)",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                         color = Color.White,
-                        maxLines = 2,
+                        maxLines = 1,
                         overflow = TextOverflow.Ellipsis
-                    )
-                    Text(
-                        text = trainNumber,
-                        style = AppThemeExtended.text.time,
-                        color = Color.White.copy(alpha = 0.85f)
                     )
                 }
                 if (bookingStatusLabel != null) {
+                    Spacer(Modifier.width(8.dp))
                     StatusBadge(
                         label = bookingStatusLabel,
                         tone = bookingStatusTone,
@@ -511,54 +515,64 @@ fun TicketCard(
                 }
             }
 
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(14.dp))
 
-            Row(verticalAlignment = Alignment.Top) {
+            // Primary Journey Section: BOARDING vs ARRIVAL with prominent times and centered arrow
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Column(Modifier.weight(1f)) {
+                    Eyebrow("BOARDING", color = Color.White.copy(alpha = 0.8f))
+                    Spacer(Modifier.height(2.dp))
                     Text(
                         text = originCode,
-                        style = MaterialTheme.typography.headlineMedium,
+                        style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
                         color = Color.White
                     )
                     Text(
                         text = originName,
                         style = MaterialTheme.typography.bodySmall,
-                        color = Color.White.copy(alpha = 0.8f),
-                        maxLines = 2,
+                        color = Color.White.copy(alpha = 0.85f),
+                        maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
-                    Spacer(Modifier.height(3.dp))
+                    Spacer(Modifier.height(4.dp))
                     Text(
                         text = originTime,
-                        style = AppThemeExtended.text.time,
+                        style = AppThemeExtended.text.timeLarge.copy(fontSize = 17.sp, fontWeight = FontWeight.SemiBold),
                         color = Color.White
                     )
                 }
+
                 Icon(
                     Icons.AutoMirrored.Filled.ArrowForward,
                     contentDescription = "to",
                     tint = Color.White.copy(alpha = 0.9f),
                     modifier = Modifier
-                        .padding(horizontal = 10.dp)
-                        .size(20.dp)
+                        .padding(horizontal = 8.dp)
+                        .size(22.dp)
                 )
+
                 Column(Modifier.weight(1f), horizontalAlignment = Alignment.End) {
+                    Eyebrow("ARRIVAL", color = Color.White.copy(alpha = 0.8f))
+                    Spacer(Modifier.height(2.dp))
                     Text(
                         text = destinationCode,
-                        style = MaterialTheme.typography.headlineMedium,
+                        style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
                         color = Color.White
                     )
                     Text(
                         text = destinationName,
                         style = MaterialTheme.typography.bodySmall,
-                        color = Color.White.copy(alpha = 0.8f),
-                        maxLines = 2,
+                        color = Color.White.copy(alpha = 0.85f),
+                        maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
-                    Spacer(Modifier.height(3.dp))
+                    Spacer(Modifier.height(4.dp))
                     Text(
                         text = destinationTime,
-                        style = AppThemeExtended.text.time,
+                        style = AppThemeExtended.text.timeLarge.copy(fontSize = 17.sp, fontWeight = FontWeight.SemiBold),
                         color = Color.White
                     )
                 }
@@ -573,31 +587,86 @@ fun TicketCard(
         // Stub: who is travelling and where they sit.
         Column(Modifier.padding(AppThemeExtended.metrics.cardPadding)) {
             if (pnr != null) {
-                TicketField(label = "PNR", value = pnr, wide = true)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Eyebrow("PNR")
+                        Spacer(Modifier.height(2.dp))
+                        Text(
+                            text = pnr,
+                            style = AppThemeExtended.text.timeLarge.copy(
+                                fontSize = 20.sp,
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 1.2.sp
+                            ),
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                    IconButton(
+                        onClick = { clipboardManager.setText(AnnotatedString(pnr)) },
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(
+                            Icons.Outlined.ContentCopy,
+                            contentDescription = "Copy PNR",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
                 Spacer(Modifier.height(14.dp))
             }
-            Row(Modifier.fillMaxWidth()) {
-                TicketField(
-                    label = "Date",
-                    value = dateLabel,
-                    modifier = Modifier.weight(1f)
-                )
-                TicketField(
-                    label = "Class",
-                    value = travelClass ?: "—",
-                    modifier = Modifier.weight(1f)
-                )
-                TicketField(
-                    label = "Platform",
-                    value = platform ?: "—",
-                    modifier = Modifier.weight(1f)
-                )
+
+            // 3 Independent Columns: DATE | CLASS | PLATFORM with defined layout area and separation
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(modifier = Modifier.weight(1.3f)) {
+                    Eyebrow("DATE")
+                    Spacer(Modifier.height(3.dp))
+                    Text(
+                        text = dateLabel,
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                Spacer(Modifier.width(10.dp))
+                Column(modifier = Modifier.weight(0.85f)) {
+                    Eyebrow("CLASS")
+                    Spacer(Modifier.height(3.dp))
+                    Text(
+                        text = travelClass ?: "—",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                Spacer(Modifier.width(10.dp))
+                Column(modifier = Modifier.weight(0.85f)) {
+                    Eyebrow("PLATFORM")
+                    Spacer(Modifier.height(3.dp))
+                    Text(
+                        text = platform ?: "—",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
             }
+
             if (passengers.isNotEmpty()) {
                 Spacer(Modifier.height(14.dp))
                 AppDivider()
                 Spacer(Modifier.height(12.dp))
-                Eyebrow(if (passengers.size == 1) "Passenger" else "Passengers")
+                Eyebrow(if (passengers.size == 1) "PASSENGER" else "PASSENGERS")
                 passengers.forEach { passenger ->
                     Spacer(Modifier.height(10.dp))
                     TicketPassengerRow(passenger)
@@ -609,28 +678,26 @@ fun TicketCard(
 
 /**
  * A passenger and their berth, laid out the way the chart is: number, person, place.
- *
- * The berth is right-aligned and set in the same weight as the name, because on a night train
- * it is the one thing on this card someone reads in a corridor at 23:00.
  */
 @Composable
 private fun TicketPassengerRow(passenger: TicketPassenger) {
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(
             text = passenger.serialLabel,
             style = AppThemeExtended.text.time,
             color = AppThemeExtended.colors.textFaint,
-            modifier = Modifier.width(26.dp)
+            modifier = Modifier.width(22.dp)
         )
         Column(Modifier.weight(1f)) {
             Text(
                 text = passenger.name,
-                style = MaterialTheme.typography.titleSmall,
+                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
                 color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
             if (passenger.detail.isNotBlank()) {
+                Spacer(Modifier.height(1.dp))
                 Text(
                     text = passenger.detail,
                     style = MaterialTheme.typography.bodySmall,
@@ -638,19 +705,19 @@ private fun TicketPassengerRow(passenger: TicketPassenger) {
                 )
             }
         }
-        Spacer(Modifier.width(10.dp))
+        Spacer(Modifier.width(12.dp))
         Column(horizontalAlignment = Alignment.End) {
             if (passenger.seat.isNotBlank()) {
                 Text(
                     text = passenger.seat,
-                    style = MaterialTheme.typography.titleSmall,
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                     color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 2,
+                    maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
             }
             if (passenger.statusLabel != null) {
-                Spacer(Modifier.height(4.dp))
+                Spacer(Modifier.height(2.dp))
                 StatusBadge(label = passenger.statusLabel, tone = passenger.statusTone)
             }
         }
@@ -745,106 +812,129 @@ fun HotelCard(
 ) {
     val colors = AppThemeExtended.colors
 
-    AppMediaCard(
+    AppCard(
         modifier = modifier,
         onClick = onClick,
         borderColor = borderColor,
-        borderWidth = borderWidth
+        borderWidth = borderWidth,
+        contentPadding = PaddingValues(0.dp)
     ) {
         Box {
-            AppImage(
-                uri = imageUri,
-                contentDescription = name,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(140.dp),
-                shape = RoundedCornerShape(0.dp),
-                placeholderIcon = Icons.Default.Hotel,
-                placeholderTint = colors.stay,
-                placeholderBackground = colors.staySoft
-            )
-            if (statusLabel != null) {
-                StatusBadge(
-                    label = statusLabel,
-                    tone = statusTone,
-                    filled = true,
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(12.dp)
+            if (!imageUri.isNullOrBlank()) {
+                PhotoBackdrop(
+                    uri = imageUri,
+                    modifier = Modifier.matchParentSize(),
+                    overlayAlpha = 0.60f
                 )
             }
-        }
-        Column(Modifier.padding(AppThemeExtended.metrics.cardPadding)) {
-            Text(
-                text = name,
-                style = MaterialTheme.typography.titleLarge,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
-            if (address != null) {
-                Spacer(Modifier.height(4.dp))
-                Row(verticalAlignment = Alignment.Top) {
-                    Icon(
-                        Icons.Default.Place,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(15.dp)
-                    )
-                    Spacer(Modifier.width(5.dp))
-                    Text(
-                        text = address,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-            }
-            if (checkInLabel != null || checkOutLabel != null) {
-                Spacer(Modifier.height(14.dp))
-                Surface(
-                    shape = AppThemeExtended.metrics.controlShape,
-                    color = MaterialTheme.colorScheme.surfaceVariant
+            Column(Modifier.padding(AppThemeExtended.metrics.cardPadding)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.Top,
+                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Row(
-                        Modifier
-                            .fillMaxWidth()
-                            .padding(12.dp)
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f)
                     ) {
-                        Column(Modifier.weight(1f)) {
-                            Eyebrow("Check-in")
-                            Text(
-                                text = checkInLabel ?: "—",
-                                style = MaterialTheme.typography.titleSmall,
-                                color = MaterialTheme.colorScheme.onSurface
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = colors.staySoft
+                        ) {
+                            Icon(
+                                Icons.Default.Hotel,
+                                contentDescription = null,
+                                tint = colors.stay,
+                                modifier = Modifier
+                                    .padding(6.dp)
+                                    .size(16.dp)
                             )
                         }
-                        if (nightsLabel != null) {
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                modifier = Modifier.padding(horizontal = 8.dp)
-                            ) {
-                                Icon(
-                                    Icons.Default.Hotel,
-                                    contentDescription = null,
-                                    tint = colors.stay,
-                                    modifier = Modifier.size(16.dp)
-                                )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            text = "STAY",
+                            style = AppThemeExtended.text.eyebrow,
+                            color = colors.stay
+                        )
+                    }
+                    if (statusLabel != null) {
+                        Spacer(Modifier.width(8.dp))
+                        StatusBadge(
+                            label = statusLabel,
+                            tone = statusTone
+                        )
+                    }
+                }
+
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = name,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+
+                if (address != null) {
+                    Spacer(Modifier.height(4.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            Icons.Default.Place,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(Modifier.width(4.dp))
+                        Text(
+                            text = address,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+
+                if (checkInLabel != null || checkOutLabel != null) {
+                    Spacer(Modifier.height(10.dp))
+                    Surface(
+                        shape = AppThemeExtended.metrics.controlShape,
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = if (imageUri.isNullOrBlank()) 1f else 0.85f)
+                    ) {
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                Eyebrow("Check-in")
                                 Text(
-                                    text = nightsLabel,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = colors.textFaint
+                                    text = checkInLabel ?: "—",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = MaterialTheme.colorScheme.onSurface
                                 )
                             }
-                        }
-                        Column(Modifier.weight(1f), horizontalAlignment = Alignment.End) {
-                            Eyebrow("Check-out")
-                            Text(
-                                text = checkOutLabel ?: "—",
-                                style = MaterialTheme.typography.titleSmall,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
+                            if (nightsLabel != null) {
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    modifier = Modifier.padding(horizontal = 8.dp)
+                                ) {
+                                    Text(
+                                        text = nightsLabel,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = colors.textFaint
+                                    )
+                                }
+                            }
+                            Column(Modifier.weight(1f), horizontalAlignment = Alignment.End) {
+                                Eyebrow("Check-out")
+                                Text(
+                                    text = checkOutLabel ?: "—",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
                         }
                     }
                 }
@@ -877,11 +967,19 @@ fun PlaceCard(
     onToggleSaved: (() -> Unit)? = null,
     statusLabel: String? = null,
     statusTone: BadgeTone = BadgeTone.POSITIVE,
+    borderColor: Color = MaterialTheme.colorScheme.outline,
+    borderWidth: Dp = AppThemeExtended.metrics.borderWidth,
     onClick: (() -> Unit)? = null
 ) {
     val colors = AppThemeExtended.colors
 
-    AppCard(modifier = modifier, onClick = onClick, contentPadding = PaddingValues(12.dp)) {
+    AppCard(
+        modifier = modifier,
+        onClick = onClick,
+        borderColor = borderColor,
+        borderWidth = borderWidth,
+        contentPadding = PaddingValues(12.dp)
+    ) {
         Row {
             Box(
                 Modifier

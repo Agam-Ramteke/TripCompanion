@@ -77,103 +77,75 @@ Consumed by `RailRadarPnrLookupService.lookup` → domain `ParsedTicket`.
   `RATE_LIMITED`, timeout → `TIMEOUT`, no network → `NETWORK_UNAVAILABLE`, unparseable →
   `MALFORMED_RESPONSE`, else `PROVIDER_ERROR`/`UNKNOWN`. Every one crosses the boundary as
   `RoutePlanOutcome.Unavailable(error)` — never a thrown HTTP exception (ADR-011, ADR-016).
-- **Consumer note (`TripMapViewModel`):** legs are aligned to the visible pins; if the provider
-  returns a leg count ≠ gap count, the whole breakdown is **discarded** and the map falls back to
-  per-gap **haversine** distance with **no** drive time (mirrors the polyline's all-or-nothing choice).
+## External: LocationIQ (geocoding & place search)
+
+- **Endpoints:**
+  - Forward Geocoding: `GET https://us1.locationiq.com/v1/search?key={key}&q={query}&format=json&countrycodes=in&addressdetails=1&limit=10`
+  - Autocomplete: `GET https://us1.locationiq.com/v1/autocomplete?key={key}&q={query}&format=json&countrycodes=in&limit=10`
+- **Auth:** Query parameter `key=<key>`. Key stored in `local.properties` → `BuildConfig.LOCATIONIQ_API_KEY`.
+- **Country Constraint:** Queries append `countrycodes=in` to ensure results are strictly focused on India.
+- **Response Format:** JSON array of place objects:
+  - `place_id` → `providerPlaceId`
+  - `display_name` → `formattedAddress`
+  - `lat`, `lon` → `latitude`, `longitude` (parsed as `Double`)
+  - `class`, `type` → `category`
+- **Error Mapping:**
+  - `401/403` → `NOT_CONFIGURED` / `PROVIDER_ERROR`
+  - `404` / empty array → `NO_RESULTS` (empty outcome, not a crash)
+  - `429` → `RATE_LIMITED`
+  - `5xx` / timeout / network → `TIMEOUT`, `NETWORK_UNAVAILABLE`, `PROVIDER_ERROR`
+- **Auto-Healing:** Stored `LocationEntity` entries with out-of-bounds or legacy coordinates are automatically validated and refreshed against LocationIQ upon map load or manual refresh.
 
 ---
 
-## External: Nominatim (OpenStreetMap geocoding / place search)
+## External: Geoapify & OpenRouteService (road routing & vector basemaps)
 
-- Consumed by `NominatimLocationSearchProvider` behind `LocationSearchService` →
-  `List<SearchResultLocation>`.
-- **Endpoint / exact params / rate limits: `UNVERIFIED` here** — read
-  `NominatimLocationSearchProvider` for the live truth before relying on specifics. Nominatim's public
-  usage policy requires a valid User-Agent and low request rates; assume that applies.
-- Returns place name + lat/lon (+ address bits) that seed a `Location`. Failures are classified like
-  the other providers (network/timeout/rate/malformed).
-
-## External: Map basemap tiles (osmdroid raster)
-
-Raster XYZ tiles rendered by `ui/components/OsmMap` (osmdroid 6.1.20). No structured response the app
-parses; osmdroid manages the disk cache and User-Agent. Tile sources are an osmdroid type, so they
-live in the UI-map layer (not a domain port) — only the MapTiler **key** is new and it crosses via
-`BuildConfig`, exactly like the other secrets (ADR-014). Three sources, chosen at render time:
-
-- **MapTiler prebuilt (keyed, default when present):** `https://api.maptiler.com/maps/{style}/256/{z}/{x}/{y}.png?key=…`
-  — HTTPS. Style id is the whole style: `dataviz` (light) / `dataviz-dark` (dark), swappable
-  (`landscape`/`pastel`/`bright-v2`) via the `MAPTILER_LIGHT_STYLE`/`MAPTILER_DARK_STYLE` constants.
-  **Key is a secret** — `local.properties` → `BuildConfig.MAPTILER_API_KEY`. A `403` = bad/absent key.
-- **CARTO (keyless fallback):** `VoyagerTiles` (light) / `DarkMatterTiles` (dark) — used whenever
-  `BuildConfig.MAPTILER_API_KEY` is blank, so the map works fully unkeyed.
-- **Esri World Imagery (keyless, satellite alternate):** `.../tile/{z}/{y}/{x}` (row-before-column;
-  assembled by hand). Selected by the layers control, unchanged by this pass.
-- **Attribution** follows the live source: "© MapTiler · © OpenStreetMap" when keyed, CARTO/OSM when
-  falling back, "© Esri, Maxar, Earthstar Geographics" on satellite. Light/dark picked by surface
-  luminance (as the map already did).
+- **Routing Endpoint:**
+  - Geoapify: `GET https://api.geoapify.com/v1/routing?waypoints={lat,lon|...}&mode=drive&apiKey={key}`
+  - OpenRouteService: `POST https://api.openrouteservice.org/v2/directions/driving-car/geojson` with `{ "coordinates": [[lon,lat], ...] }`
+- **Vector Basemap Styles:** Geoapify MapLibre style JSON endpoints (`osm-bright-smooth`, `dark-matter`, `positron`).
+- **Response:** GeoJSON FeatureCollection with line coordinates and segment metrics (distance & drive duration).
 
 ---
 
-## Internal domain ports (the app's real "contracts")
+## External: Map basemap tiles (osmdroid & MapLibre vector/raster)
 
-These interfaces are the stable surface the app codes against; the vendor is an implementation detail.
+Raster XYZ tiles and vector styles rendered by `ui/components/OsmMap` and `TripVectorMap`:
+- **Low-contrast travel styles:** `positron` (light) and `dark-matter` (dark) vector/raster basemaps.
+- **Glowing day route:** Electric azure (`#388AF6`) in light mode; glowing cyan (`#00D2C4`) in dark mode.
+- **Illustrated pins:** `TeardropPinMarker` canvas rendering with category glyphs and high-contrast frosted text badges (ADR-025).
 
-| Port (`domain/service`) | Methods | Result type | Bound impl (`di`) |
-|---|---|---|---|
-| `TrainStatusProvider` | `fetchStatus(train, schedule)`, `fetchSchedule(number)`; `providerName`, `isLive` | `TrainRunStatus?` / `List<TrainStop>?` | RailRadar (live) or ScheduleProjection — by key |
+---
+
+## Domain Ports (Internal Service Boundaries)
+
+| Port Interface | Concrete Data Provider | Notes |
+|---|---|---|
+| `LocationSearchProvider` | `LocationIqLocationSearchProvider` | Turns text queries into `SearchResultLocation` candidates. |
+| `RoutePlanProvider` | `GeoapifyRoutePlanProvider` / `OpenRouteServiceRouteProvider` | Turn-by-turn road geometry & leg distances. |
+| `TrainStatusProvider` | `RailRadarTrainStatusProvider` | Live running status & delay minutes. |
+| `PnrLookupService` | `RailRadarPnrLookupService` | PNR status, coach, berth allotments. |
+| `DeviceLocationProvider` | `AndroidDeviceLocationProvider` | Real-time GPS location via Android LocationManager. |
 | `TrainStatusService` | `refresh(trainId, force)`, `refreshSchedule(trainId)` | `TrainStatusOutcome` (`Updated`/`Cached`/`Failed`), `TrainScheduleOutcome` | `DefaultTrainStatusService` |
 | `PnrLookupService` | `lookup(pnr)`; `isAvailable` | `PnrLookupOutcome` (`Found(ParsedTicket)`/`Failed(error)`) | `RailRadarPnrLookupService` |
 | `LocationSearchService` | search by query | `SearchResultLocation` list + classified failure | `DefaultLocationSearchService` → Nominatim provider |
 | `TicketImportService` | import an IRCTC e-ticket PDF | `ParsedTicket` (+ warnings) | `IrctcTicketImportService` |
 | `TripTransferService` | export/import a trip (+ images) | archive / restore outcome | `TripTransferServiceImpl` |
-| `RoutePlanService` (over `RoutePlanProvider`) | `planRoute(waypoints)` | `RoutePlanOutcome` (`Routed(points, legs)` / `Unavailable(error)`) | `DefaultRoutePlanService` → `OpenRouteServiceRouteProvider` |
 | `DeviceLocationProvider` | `locationUpdates()` | `Flow<DeviceLocation?>` (null = no fix / no permission) | `AndroidDeviceLocationProvider` (framework `LocationManager`) |
 
 **Policy constants (one place):** cache TTL **2 min**, request timeout **12 s** in
 `DefaultTrainStatusService` / `TrainStatusService`.
 
-**Error enums** (never raw exceptions above `data/`): `TrainStatusError` {NETWORK_UNAVAILABLE,
-TIMEOUT, RATE_LIMITED, PROVIDER_ERROR, MALFORMED_RESPONSE, TRAIN_NOT_FOUND, NO_SCHEDULE, UNKNOWN};
-`PnrLookupError` {NOT_CONFIGURED, NETWORK_UNAVAILABLE, TIMEOUT, RATE_LIMITED, NOT_FOUND, MALFORMED,
-UNKNOWN}; `RoutePlanError` {NOT_CONFIGURED, NETWORK_UNAVAILABLE, TIMEOUT, RATE_LIMITED, NO_ROUTE,
-PROVIDER_ERROR, MALFORMED_RESPONSE, UNKNOWN}.
-
-**Trip archive format (`.trip` zip):** the manifest (`data/transfer/TripManifest.kt`) is written
-**by hand**, not reflectively — a domain field is *not* in the file until it's added to
-`encodeEvent`/`decodeEvent` (etc.). Every image (trip cover, place photo, planned-shot reference,
-stay photo, and — since Task 3 — an activity's `backgroundImage`) is stored as an **archive entry
-name** (`images/img_N.jpg`), never a device URI: the exporter's `ImageCollector.carry` bundles the
-bytes, the importer's `local(...)` swaps the name back for a freshly written local file. Reading is
-forgiving (a missing optional field → the model's default), so adding an optional field is
-**additive and non-breaking** — `TripArchive.VERSION` is only bumped when a change would make an
-older reader misread a file, which an ignored-by-old-apps optional field does not. Round-trip
-covered by `TripManifestTest`.
-
 ---
 
-## Local IPC / platform contracts (not HTTP)
+## Motion & UI Contracts (`ui/theme/MotionTokens.kt`)
 
-- **Photo picker:** `ActivityResultContracts.PickVisualMedia` (image only) → URI copied into
-  app-private storage by `ImageStorageHelper.saveImageToInternalStorage(context, uri)`; the app then
-  stores only the returned `file://` path (ADR-009).
-- **PDF import:** IRCTC e-ticket PDF read as text (`PdfTextExtractor`) then parsed
-  (`IrctcTicketParser`). Real e-tickets contain passenger names/PNRs → `docs/Trip/*.pdf` is
-  git-ignored; never commit sample tickets.
-- **DataStore:** `UserPreferencesStore` persists theme preference (key/values — read the file for
-  exact keys; not reproduced here to avoid drift).
-- **External navigation:** `core/util/ExternalNavigator.navigateTo(context, latitude, longitude, label)`
-  fires a platform `Intent` — `google.navigation:q=lat,lon` first, then `geo:0,0?q=lat,lon(label)`,
-  then a silent no-op — so the map's Navigate action hands off to the user's maps app (ADR-018). No
-  in-app turn-by-turn; distinct from the ORS road line, which is in-app *display* only.
-
-## Map rendering contracts (UI layer, `ui/components/OsmMap`)
-
-Not domain ports — these are the UI-map's own value types the screen passes in. Kept here because the
-screen↔map coupling is load-bearing:
-
-- **`MapMarker(… number, state: MarkerState, color)`** with `enum MarkerState { Completed, Upcoming,
-  Current }`. `number` **must equal** the sheet card's `orderInDay` (marker/sheet numbers move in
-  lockstep); `state` is derived by the screen from `TripStateEngine.computeEventStatus` — never a
-  place name (ADR-004, ADR-017).
-- **Basemap selection** (MapTiler-keyed → CARTO fallback → Esri satellite) and its attribution string
-  live in `OsmMap`; see the "Map basemap tiles" external above (ADR-014).
+Standard animation constants and easing curves for the app motion system (ADR-021):
+- `PAGE_TRANSITION_DURATION = 240` ms
+- `CONTENT_ENTER_DURATION = 280` ms
+- `CONTENT_STAGGER_DELAY = 25` ms
+- `BUTTON_PRESS_DURATION = 120` ms
+- `NAV_PILL_DURATION = 220` ms
+- `EMPTY_STATE_ENTER_DURATION = 300` ms
+- `StandardEasing = FastOutSlowInEasing`
+- `LocalReducedMotion`: CompositionLocal for system reduced-motion accessibility preference.

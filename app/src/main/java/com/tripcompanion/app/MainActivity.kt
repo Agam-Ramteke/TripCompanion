@@ -19,12 +19,14 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             AppTheme {
-                // The app's ground colour, not `surface`: cards are white and sit *on* this.
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.background
-                ) {
-                    AppNavHost()
+                com.tripcompanion.app.ui.theme.ProvideMotionEnvironment {
+                    // The app's ground colour, not `surface`: cards are white and sit *on* this.
+                    Surface(
+                        modifier = Modifier.fillMaxSize(),
+                        color = androidx.compose.ui.graphics.Color.Transparent
+                    ) {
+                        AppNavHost()
+                    }
                 }
             }
         }

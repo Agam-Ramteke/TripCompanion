@@ -3,6 +3,7 @@ package com.tripcompanion.app
 import android.app.Application
 import android.content.Context
 import dagger.hilt.android.HiltAndroidApp
+import org.maplibre.android.MapLibre
 import org.osmdroid.config.Configuration
 import java.io.File
 
@@ -11,6 +12,7 @@ class TripCompanionApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        MapLibre.getInstance(this)
         configureMapTiles()
     }
 

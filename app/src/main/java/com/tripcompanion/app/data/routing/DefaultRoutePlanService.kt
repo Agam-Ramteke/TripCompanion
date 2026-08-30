@@ -1,5 +1,6 @@
 package com.tripcompanion.app.data.routing
 
+import com.tripcompanion.app.domain.service.PlannedRoute
 import com.tripcompanion.app.domain.service.RoutePlanError
 import com.tripcompanion.app.domain.service.RoutePlanException
 import com.tripcompanion.app.domain.service.RoutePlanOutcome
@@ -9,25 +10,21 @@ import com.tripcompanion.app.domain.service.RoutePoint
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.withTimeout
+import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
  * Routing policy, in one place (§11).
  *
- * Everything here is the kind of decision that should not change when the backend changes: how few
- * stops is not a route, how long to wait, and — the point of the whole class — that a failure is a
- * *value*, not an exception. "No key", "offline on a train", "no road between these two stops" are
- * ordinary states for a trip map to be in, and each comes back as [RoutePlanOutcome.Unavailable] so
- * the screen can quietly fall back to straight legs rather than crash or show an error.
- *
- * The provider supplies road geometry or throws; this decides what the app does about it. The
- * no-key short-circuit avoids a pointless network round trip on the shipping default.
+ * Automatically caches calculated routes between waypoints to minimize external API calls.
  */
 @Singleton
 class DefaultRoutePlanService @Inject constructor(
     private val provider: RoutePlanProvider
 ) : RoutePlanService {
+
+    private val routeCache = ConcurrentHashMap<List<RoutePoint>, PlannedRoute>()
 
     override suspend fun planRoute(waypoints: List<RoutePoint>): RoutePlanOutcome {
         if (!provider.isConfigured) {
@@ -37,11 +34,17 @@ class DefaultRoutePlanService @Inject constructor(
             return RoutePlanOutcome.Unavailable(RoutePlanError.NO_ROUTE)
         }
 
-        // A pathological day should degrade to a shorter road line, not a rejected request.
         val capped = if (waypoints.size > RoutePlanService.MAX_WAYPOINTS) {
             waypoints.take(RoutePlanService.MAX_WAYPOINTS)
         } else {
             waypoints
+        }
+
+        // Return from memory cache if already computed for these exact waypoints
+        routeCache[capped]?.let { cached ->
+            if (cached.points.size >= 2) {
+                return RoutePlanOutcome.Routed(cached.points, cached.legs)
+            }
         }
 
         return try {
@@ -49,6 +52,7 @@ class DefaultRoutePlanService @Inject constructor(
                 provider.route(capped)
             }
             if (planned.points.size >= 2) {
+                routeCache[capped] = planned
                 RoutePlanOutcome.Routed(planned.points, planned.legs)
             } else {
                 RoutePlanOutcome.Unavailable(RoutePlanError.NO_ROUTE)

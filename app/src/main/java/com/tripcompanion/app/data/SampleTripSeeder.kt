@@ -21,6 +21,7 @@ import com.tripcompanion.app.domain.repository.PlannedPhotoRepository
 import com.tripcompanion.app.domain.repository.StayDetailsRepository
 import com.tripcompanion.app.domain.repository.TrainRepository
 import com.tripcompanion.app.domain.repository.TripRepository
+import kotlinx.coroutines.flow.first
 import java.time.LocalDate
 import java.time.LocalTime
 import javax.inject.Inject
@@ -28,19 +29,6 @@ import javax.inject.Singleton
 
 /**
  * Writes one fully-populated trip so a first launch has something to look at.
- *
- * This is *data*, not a feature. Nothing in the app reads the names, coordinates or times
- * below; the seeder calls the same repositories the editors call, and every screen treats the
- * result as an ordinary user trip that can be edited or deleted. §4 therefore holds: there is
- * no branch anywhere on "Udaipur", and removing this file removes a menu item, not a code path.
- *
- * The trip is anchored to [TimeProvider.now] rather than to fixed dates, so day one is always
- * today and the itinerary always has both a completed past and an upcoming future to show.
- *
- * The place details and the two train timetables are **illustrative**. They are close to the
- * real thing because a sample that reads as nonsense is not a useful sample, but they are not
- * a source of truth: with a live API key the train screens replace the stored timetable with
- * the railway's own, and the places carry no photos until someone adds them.
  */
 @Singleton
 class SampleTripSeeder @Inject constructor(
@@ -54,25 +42,199 @@ class SampleTripSeeder @Inject constructor(
 ) {
 
     /**
-     * Inserts the trip and everything hanging off it, and returns its id.
-     *
-     * Not idempotent by design — a second call makes a second trip. Guarding on the name would
-     * be exactly the special-casing §4 rules out, and the Trips screen can already delete one.
+     * Inserts the sample trips idempotently — never duplicates existing records.
      */
     suspend fun seed(): Long {
-        val day1 = timeProvider.now().toLocalDate()
+        val existingTrips = tripRepository.getAllTrips().first()
+        val existingAgra = existingTrips.firstOrNull { it.name.contains("Agra", ignoreCase = true) }
+        val existingUdaipur = existingTrips.firstOrNull { it.name.contains("Udaipur", ignoreCase = true) }
+
+        if (existingAgra != null && existingUdaipur != null) {
+            return existingAgra.id
+        }
+
+        val agraTripId = existingAgra?.id ?: seedAgraTrip()
+        if (existingUdaipur == null) {
+            val day1 = timeProvider.now().toLocalDate()
+            val tripId = tripRepository.insertTrip(
+                Trip(
+                    name = "Udaipur Getaway",
+                    startDate = day1,
+                    endDate = day1.plusDays(4),
+                    status = TripStatus.PLANNING
+                )
+            )
+
+            val places = insertPlaces()
+            val journeys = insertEvents(tripId, day1, places)
+            insertTrains(tripId, day1, journeys)
+        }
+
+        return agraTripId
+    }
+
+    /**
+     * Seeds the 1-Day Agra Itinerary (7 stops in sequence).
+     */
+    suspend fun seedAgraTrip(): Long {
+        val today = timeProvider.now().toLocalDate()
         val tripId = tripRepository.insertTrip(
             Trip(
-                name = "Udaipur Getaway",
-                startDate = day1,
-                endDate = day1.plusDays(4),
+                name = "Day in Agra",
+                startDate = today,
+                endDate = today,
                 status = TripStatus.ACTIVE
             )
         )
 
-        val places = insertPlaces()
-        val journeys = insertEvents(tripId, day1, places)
-        insertTrains(tripId, day1, journeys)
+        val stationLocId = locationRepository.insertLocation(
+            Location(
+                name = "Agra Cantt Railway Station",
+                address = "Idgah Colony, Agra, Uttar Pradesh",
+                latitude = 27.1583,
+                longitude = 77.9944,
+                category = "Transit",
+                rating = 4.2
+            )
+        )
+        val hotelLocId = locationRepository.insertLocation(
+            Location(
+                name = "Tajview Hotel",
+                address = "Fatehabad Road, Tajganj, Agra",
+                latitude = 27.1612,
+                longitude = 78.0384,
+                category = "Hotel",
+                rating = 4.6
+            )
+        )
+        val tajLocId = locationRepository.insertLocation(
+            Location(
+                name = "Taj Mahal",
+                address = "Dharmapuri, Forest Colony, Tajganj, Agra",
+                latitude = 27.1751,
+                longitude = 78.0421,
+                category = "Monument",
+                rating = 4.9,
+                openingHours = "06:00 – 18:30 (Closed Fridays)",
+                estimatedVisitMinutes = 150
+            )
+        )
+        val lunchLocId = locationRepository.insertLocation(
+            Location(
+                name = "Pinch of Spice Restaurant",
+                address = "1076/2, Fatehabad Road, Tajganj, Agra",
+                latitude = 27.1648,
+                longitude = 78.0460,
+                category = "Restaurant",
+                rating = 4.4,
+                openingHours = "11:30 – 23:00",
+                estimatedVisitMinutes = 60
+            )
+        )
+        val fortLocId = locationRepository.insertLocation(
+            Location(
+                name = "Agra Fort",
+                address = "Agra Fort, Rakabganj, Agra",
+                latitude = 27.1795,
+                longitude = 78.0211,
+                category = "Monument",
+                rating = 4.7,
+                openingHours = "06:00 – 18:00 daily",
+                estimatedVisitMinutes = 120
+            )
+        )
+        val gardenLocId = locationRepository.insertLocation(
+            Location(
+                name = "Mehtab Bagh",
+                address = "Opposite Taj Mahal, Nagla Devjit, Agra",
+                latitude = 27.1800,
+                longitude = 78.0445,
+                category = "Garden",
+                rating = 4.5,
+                openingHours = "06:00 – 19:00",
+                estimatedVisitMinutes = 120
+            )
+        )
+
+        var order = 0
+        suspend fun addAgraEvent(
+            start: LocalTime,
+            end: LocalTime,
+            type: EventType,
+            title: String,
+            what: String,
+            locationId: Long
+        ): Long {
+            return eventRepository.insertEvent(
+                Event(
+                    tripId = tripId,
+                    type = type,
+                    title = title,
+                    startTime = today.atTime(start),
+                    endTime = today.atTime(end),
+                    locationId = locationId,
+                    whatWeAreDoing = what,
+                    order = order++
+                )
+            )
+        }
+
+        addAgraEvent(
+            start = LocalTime.of(5, 0),
+            end = LocalTime.of(5, 20),
+            type = EventType.JOURNEY,
+            title = "Agra Cantt Railway Station",
+            what = "Arrival at Agra Cantt on morning express. Exit from Platform 1 to prepaid taxi booth.",
+            locationId = stationLocId
+        )
+        addAgraEvent(
+            start = LocalTime.of(5, 40),
+            end = LocalTime.of(8, 0),
+            type = EventType.STAY,
+            title = "Hotel Rest & Breakfast",
+            what = "Check in at Tajview Hotel, freshen up, and enjoy rooftop breakfast with distant Taj view.",
+            locationId = hotelLocId
+        )
+        addAgraEvent(
+            start = LocalTime.of(8, 30),
+            end = LocalTime.of(11, 0),
+            type = EventType.VISIT,
+            title = "Taj Mahal",
+            what = "Enter from East Gate for shorter morning queues. Guided visit through gardens, main mausoleum, and Yamuna terrace.",
+            locationId = tajLocId
+        )
+        addAgraEvent(
+            start = LocalTime.of(11, 30),
+            end = LocalTime.of(12, 30),
+            type = EventType.FOOD,
+            title = "Lunch at Pinch of Spice",
+            what = "Authentic North Indian lunch on Fatehabad Road. Famous for Mughlai cuisine and dal makhani.",
+            locationId = lunchLocId
+        )
+        addAgraEvent(
+            start = LocalTime.of(13, 0),
+            end = LocalTime.of(15, 0),
+            type = EventType.VISIT,
+            title = "Agra Fort",
+            what = "Explore Jahangiri Mahal, Diwan-i-Khas, and the Musamman Burj balcony where Shah Jahan gazed at the Taj.",
+            locationId = fortLocId
+        )
+        addAgraEvent(
+            start = LocalTime.of(16, 0),
+            end = LocalTime.of(18, 0),
+            type = EventType.VISIT,
+            title = "Mehtab Bagh Sunset",
+            what = "Watch the sunset reflecting on the white marble of the Taj Mahal across the Yamuna River from the Charbagh complex.",
+            locationId = gardenLocId
+        )
+        addAgraEvent(
+            start = LocalTime.of(18, 30),
+            end = LocalTime.of(21, 0),
+            type = EventType.STAY,
+            title = "Hotel / End of Day",
+            what = "Return to hotel, relax and evening dinner.",
+            locationId = hotelLocId
+        )
 
         return tripId
     }

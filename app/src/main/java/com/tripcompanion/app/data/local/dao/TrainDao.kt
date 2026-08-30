@@ -46,6 +46,9 @@ interface TrainDao {
     @Update
     suspend fun updateTrain(train: TrainEntity)
 
+    @Query("SELECT * FROM trains WHERE tripId = :tripId AND LOWER(TRIM(number)) = LOWER(TRIM(:trainNumber)) AND departureTime = :departureTime LIMIT 1")
+    suspend fun findTrainByNumberAndDeparture(tripId: Long, trainNumber: String, departureTime: java.time.LocalDateTime): TrainEntity?
+
     @Query("DELETE FROM trains WHERE id = :id")
     suspend fun deleteTrainById(id: Long)
 }

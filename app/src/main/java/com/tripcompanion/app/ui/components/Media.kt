@@ -32,10 +32,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import coil.compose.SubcomposeAsyncImage
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.tripcompanion.app.domain.model.EventType
 import com.tripcompanion.app.ui.theme.AppThemeExtended
 
@@ -51,22 +53,16 @@ import com.tripcompanion.app.ui.theme.AppThemeExtended
 
 /** The scrim under text on a photo. Dark enough for white type, light enough to see through. */
 private val PhotoScrim = Brush.verticalGradient(
-    0.0f to Color.Transparent,
-    0.45f to Color(0x33000000),
-    1.0f to Color(0xD9000000)
+    0.0f to Color(0x73000000),
+    0.35f to Color(0x33000000),
+    0.65f to Color(0x66000000),
+    1.0f to Color(0xDF000000)
 )
 
 /**
  * A photograph behind a card's own content, blurred and washed toward the surface it sits on.
  *
- * The counterpart of [PhotoScrim]: that one darkens a photo so white type can sit over it, this
- * one blurs a photo and fades it toward the theme's own surface colour so the card's *ordinary*
- * type still can. A card that switched to white text whenever it happened to have a picture would
- * read as two different components; this way the photograph is atmosphere and the card is unchanged.
- *
- * [blurRadius] frosts the picture so it reads as texture rather than a competing image behind the
- * text; the fade then only has to lift contrast the rest of the way, which is why it can be gentler
- * (and the photo more present) than an unblurred wash would allow. The wash is deliberately light —
+ * Takes [fadeColor] — typically the background it will bleed into — and fades toward it:
  * a background the user chose for this card should read as their photograph, not a tinted panel —
  * and only the lower portion stays opaque enough to seat the card's own dark text. Blur is a real
  * render effect on API 31+ and a silent no-op below it — the fade alone still carries legibility there.
@@ -80,7 +76,8 @@ fun PhotoBackdrop(
     uri: String?,
     modifier: Modifier = Modifier,
     fadeColor: Color = MaterialTheme.colorScheme.surface,
-    blurRadius: Dp = 16.dp,
+    blurRadius: Dp = 12.dp,
+    overlayAlpha: Float = 0.60f,
     contentDescription: String? = null
 ) {
     if (uri.isNullOrBlank()) return
@@ -98,9 +95,9 @@ fun PhotoBackdrop(
                 .fillMaxSize()
                 .background(
                     Brush.verticalGradient(
-                        0.0f to fadeColor.copy(alpha = 0.42f),
-                        0.55f to fadeColor.copy(alpha = 0.60f),
-                        1.0f to fadeColor.copy(alpha = 0.80f)
+                        0.0f to fadeColor.copy(alpha = (overlayAlpha * 0.75f).coerceIn(0f, 1f)),
+                        0.5f to fadeColor.copy(alpha = overlayAlpha.coerceIn(0f, 1f)),
+                        1.0f to fadeColor.copy(alpha = (overlayAlpha * 1.25f).coerceIn(0f, 0.92f))
                     )
                 )
         )
@@ -137,19 +134,15 @@ fun AppImage(
         if (uri.isNullOrBlank()) {
             fallback()
         } else {
-            SubcomposeAsyncImage(
-                model = uri,
+            val context = LocalContext.current
+            AsyncImage(
+                model = ImageRequest.Builder(context)
+                    .data(uri)
+                    .crossfade(true)
+                    .build(),
                 contentDescription = contentDescription,
                 contentScale = contentScale,
-                modifier = Modifier.fillMaxSize(),
-                loading = {
-                    Box(
-                        Modifier
-                            .fillMaxSize()
-                            .background(MaterialTheme.colorScheme.surfaceVariant)
-                    )
-                },
-                error = { fallback() }
+                modifier = Modifier.fillMaxSize()
             )
         }
     }

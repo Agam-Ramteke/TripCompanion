@@ -2,6 +2,7 @@ package com.tripcompanion.app.domain.engine
 
 import com.tripcompanion.app.domain.model.Event
 import com.tripcompanion.app.domain.model.EventStatus
+import com.tripcompanion.app.domain.model.EventType
 import com.tripcompanion.app.domain.model.Trip
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -75,15 +76,70 @@ class TripStateEngine {
             event.copy(status = computeEventStatus(event, now))
         }
 
-        val currentEvent = computedEvents.firstOrNull { it.status == EventStatus.ACTIVE }
+        val activeNonStayEvent = computedEvents.firstOrNull {
+            it.status == EventStatus.ACTIVE && it.type != EventType.STAY
+        }
+
+        val currentEvent = if (activeNonStayEvent != null) {
+            activeNonStayEvent
+        } else {
+            computedEvents.firstOrNull { event ->
+                if (event.status != EventStatus.ACTIVE) return@firstOrNull false
+                if (event.type != EventType.STAY) return@firstOrNull true
+
+                val isCheckedIn = event.actualStartTime != null
+                if (!isCheckedIn) {
+                    // Stay is active but not checked in yet: Check-in action is pending
+                    true
+                } else {
+                    // Stay is checked in: only active if no intermediate upcoming/starting_soon/active events exist before checkout
+                    val hasPendingIntermediateEvents = computedEvents.any { other ->
+                        other.id != event.id &&
+                            other.startTime >= event.startTime &&
+                            other.startTime < event.endTime &&
+                            (other.status == EventStatus.UPCOMING ||
+                                other.status == EventStatus.STARTING_SOON ||
+                                other.status == EventStatus.ACTIVE)
+                    }
+                    !hasPendingIntermediateEvents
+                }
+            }
+        }
+
         val nextEvent = if (currentEvent != null) {
             val currentIndex = computedEvents.indexOfFirst { it.id == currentEvent.id }
-            computedEvents.drop(currentIndex + 1).firstOrNull {
-                it.status == EventStatus.UPCOMING || it.status == EventStatus.STARTING_SOON
+            computedEvents.drop(currentIndex + 1).firstOrNull { candidate ->
+                if (candidate.status != EventStatus.UPCOMING && candidate.status != EventStatus.STARTING_SOON) {
+                    return@firstOrNull false
+                }
+                if (candidate.type == EventType.STAY && candidate.actualStartTime != null) {
+                    val hasPendingIntermediate = computedEvents.any { other ->
+                        other.id != candidate.id &&
+                            other.startTime >= candidate.startTime &&
+                            other.startTime < candidate.endTime &&
+                            (other.status == EventStatus.UPCOMING || other.status == EventStatus.STARTING_SOON)
+                    }
+                    !hasPendingIntermediate
+                } else {
+                    true
+                }
             }
         } else {
-            computedEvents.firstOrNull {
-                it.status == EventStatus.UPCOMING || it.status == EventStatus.STARTING_SOON
+            computedEvents.firstOrNull { candidate ->
+                if (candidate.status != EventStatus.UPCOMING && candidate.status != EventStatus.STARTING_SOON) {
+                    return@firstOrNull false
+                }
+                if (candidate.type == EventType.STAY && candidate.actualStartTime != null) {
+                    val hasPendingIntermediate = computedEvents.any { other ->
+                        other.id != candidate.id &&
+                            other.startTime >= candidate.startTime &&
+                            other.startTime < candidate.endTime &&
+                            (other.status == EventStatus.UPCOMING || other.status == EventStatus.STARTING_SOON)
+                    }
+                    !hasPendingIntermediate
+                } else {
+                    true
+                }
             }
         }
 
@@ -148,6 +204,11 @@ class TripStateEngine {
             event.status == EventStatus.SKIPPED
         ) {
             return event.status
+        }
+
+        // If explicitly checked in or boarded and not yet finished
+        if (event.actualStartTime != null && event.actualEndTime == null) {
+            return EventStatus.ACTIVE
         }
 
         return when {

@@ -543,4 +543,92 @@ class TripStateEngineTest {
         assertNull("Skipped Visit A must not be current at 10:30", stateWithSkippedA.currentEvent)
         assertEquals("Next event should be Visit B when Visit A is skipped", 3L, stateWithSkippedA.nextEvent?.id)
     }
+
+    @Test
+    fun testStayCheckIn_advancesToIntermediateActivitiesAndThenCheckOut() {
+        val stay = Event(
+            id = 10,
+            tripId = 1,
+            type = EventType.STAY,
+            title = "Grand Palace Hotel",
+            startTime = LocalDateTime.of(2026, 8, 20, 14, 0),
+            endTime = LocalDateTime.of(2026, 8, 22, 11, 0),
+            order = 1
+        )
+        val lunch = Event(
+            id = 11,
+            tripId = 1,
+            type = EventType.FOOD,
+            title = "Lunch at Spice Court",
+            startTime = LocalDateTime.of(2026, 8, 20, 15, 30),
+            endTime = LocalDateTime.of(2026, 8, 20, 16, 30),
+            order = 2
+        )
+        val fortVisit = Event(
+            id = 12,
+            tripId = 1,
+            type = EventType.VISIT,
+            title = "Fort Tour",
+            startTime = LocalDateTime.of(2026, 8, 21, 10, 0),
+            endTime = LocalDateTime.of(2026, 8, 21, 13, 0),
+            order = 3
+        )
+        val trainHome = Event(
+            id = 13,
+            tripId = 1,
+            type = EventType.JOURNEY,
+            title = "Train Home",
+            startTime = LocalDateTime.of(2026, 8, 22, 14, 0),
+            endTime = LocalDateTime.of(2026, 8, 22, 20, 0),
+            order = 4
+        )
+        val itinerary = listOf(stay, lunch, fortVisit, trainHome)
+
+        // 1. Before check-in (13:45): Current = null, Next = Stay (Check-in)
+        val beforeCheckIn = engine.computeState(baseTrip, itinerary, LocalDateTime.of(2026, 8, 20, 13, 45))
+        assertEquals(10L, beforeCheckIn.nextEvent?.id)
+
+        // 2. User checks in at 14:00 (actualStartTime is set). At 14:15, Next = Lunch (15:30)
+        val checkedInStay = stay.copy(actualStartTime = LocalDateTime.of(2026, 8, 20, 14, 0), status = EventStatus.ACTIVE)
+        val afterCheckIn = engine.computeState(
+            baseTrip,
+            listOf(checkedInStay, lunch, fortVisit, trainHome),
+            LocalDateTime.of(2026, 8, 20, 14, 15)
+        )
+        assertNull("Stay should yield currentEvent when checked in and intermediate activities are pending", afterCheckIn.currentEvent)
+        assertEquals("Next up should be Lunch after checking in to hotel", 11L, afterCheckIn.nextEvent?.id)
+
+        // 3. During Lunch (15:45): Current = Lunch, Next = Fort Tour
+        val duringLunch = engine.computeState(
+            baseTrip,
+            listOf(checkedInStay, lunch, fortVisit, trainHome),
+            LocalDateTime.of(2026, 8, 20, 15, 45)
+        )
+        assertEquals("Current event should be Lunch, not Stay", 11L, duringLunch.currentEvent?.id)
+        assertEquals("Next event should be Fort Tour", 12L, duringLunch.nextEvent?.id)
+
+        // 4. After all intermediate activities are completed on Day 22 morning (10:45): Stay becomes current for Check-out!
+        val completedLunch = lunch.copy(status = EventStatus.COMPLETED)
+        val completedFort = fortVisit.copy(status = EventStatus.COMPLETED)
+        val atCheckOutTime = engine.computeState(
+            baseTrip,
+            listOf(checkedInStay, completedLunch, completedFort, trainHome),
+            LocalDateTime.of(2026, 8, 22, 10, 45)
+        )
+        assertEquals("Stay should be currentEvent for Check-out when intermediate events are done", 10L, atCheckOutTime.currentEvent?.id)
+        assertEquals("Next event should be Train Home", 13L, atCheckOutTime.nextEvent?.id)
+
+        // 5. After user checks out (actualEndTime set, status = COMPLETED): Next Up is Train Home!
+        val checkedOutStay = checkedInStay.copy(
+            actualEndTime = LocalDateTime.of(2026, 8, 22, 10, 50),
+            status = EventStatus.COMPLETED
+        )
+        val afterCheckOut = engine.computeState(
+            baseTrip,
+            listOf(checkedOutStay, completedLunch, completedFort, trainHome),
+            LocalDateTime.of(2026, 8, 22, 11, 0)
+        )
+        assertNull(afterCheckOut.currentEvent)
+        assertEquals("Next event should be Train Home after checkout", 13L, afterCheckOut.nextEvent?.id)
+    }
 }

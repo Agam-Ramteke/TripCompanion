@@ -112,7 +112,7 @@ class JourneyEventLinker @Inject constructor(
     /**
      * Resolves or creates a [Location] for the station name, searching online if available.
      */
-    private suspend fun resolveStationLocation(stationName: String): Long? {
+    suspend fun resolveStationLocation(stationName: String, forceRefresh: Boolean = false): Long? {
         if (stationName.isBlank() || locationRepository == null) return null
         return try {
             val existing = locationRepository.getAllLocations().first()
@@ -120,32 +120,58 @@ class JourneyEventLinker @Inject constructor(
                 it.name.equals(stationName, ignoreCase = true) ||
                     it.name.startsWith(stationName, ignoreCase = true)
             }
-            if (match != null) return match.id
+            if (!forceRefresh && match != null && match.latitude in 6.0..38.0 && match.longitude in 68.0..98.0 && match.providerName == "LocationIQ") {
+                return match.id
+            }
 
             val place: SearchResultLocation? = locationSearchService?.let { searchService ->
                 val query = if (stationName.contains("station", ignoreCase = true)) {
-                    stationName
+                    "$stationName, India"
                 } else {
-                    "$stationName Railway Station"
+                    "$stationName Railway Station, India"
                 }
                 when (val outcome = searchService.searchPlaces(query)) {
-                    is LocationSearchOutcome.Results -> outcome.places.firstOrNull()
+                    is LocationSearchOutcome.Results -> {
+                        val mainToken = stationName.split(" ", "-", ".").firstOrNull { it.length > 2 }?.lowercase()
+                        outcome.places.firstOrNull { p ->
+                            if (mainToken != null) {
+                                p.name.lowercase().contains(mainToken) || p.formattedAddress.lowercase().contains(mainToken)
+                            } else true
+                        } ?: outcome.places.firstOrNull()
+                    }
                     else -> null
                 }
             }
 
             if (place != null) {
-                locationRepository.insertLocation(
-                    Location(
-                        name = stationName,
-                        address = place.formattedAddress,
-                        latitude = place.latitude,
-                        longitude = place.longitude,
-                        category = "Transit",
-                        providerPlaceId = place.providerPlaceId,
-                        providerName = place.providerName
+                if (match != null) {
+                    locationRepository.updateLocation(
+                        match.copy(
+                            name = stationName,
+                            address = place.formattedAddress,
+                            latitude = place.latitude,
+                            longitude = place.longitude,
+                            category = "Transit",
+                            providerPlaceId = place.providerPlaceId,
+                            providerName = place.providerName
+                        )
                     )
-                )
+                    match.id
+                } else {
+                    locationRepository.insertLocation(
+                        Location(
+                            name = stationName,
+                            address = place.formattedAddress,
+                            latitude = place.latitude,
+                            longitude = place.longitude,
+                            category = "Transit",
+                            providerPlaceId = place.providerPlaceId,
+                            providerName = place.providerName
+                        )
+                    )
+                }
+            } else if (match != null) {
+                match.id
             } else {
                 locationRepository.insertLocation(
                     Location(

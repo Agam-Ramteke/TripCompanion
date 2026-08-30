@@ -6,6 +6,7 @@ import kotlinx.coroutines.flow.Flow
 interface EventRepository {
     fun getEventsForTrip(tripId: Long): Flow<List<Event>>
     fun getEventById(id: Long): Flow<Event?>
+    suspend fun getEventByIdOnce(id: Long): Event?
 
     /** Itinerary entries that point at one place, across every trip. */
     fun getEventsForLocation(locationId: Long): Flow<List<Event>>

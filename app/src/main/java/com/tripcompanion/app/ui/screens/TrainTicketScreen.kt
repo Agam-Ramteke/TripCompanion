@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
@@ -61,7 +62,12 @@ fun TrainTicketScreen(
     val metrics = AppThemeExtended.metrics
 
     if (state.isLoading) {
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Box(
+            Modifier
+                .fillMaxSize()
+                .statusBarsPadding(),
+            contentAlignment = Alignment.Center
+        ) {
             CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
         }
         return
@@ -72,6 +78,7 @@ fun TrainTicketScreen(
         Box(
             Modifier
                 .fillMaxSize()
+                .statusBarsPadding()
                 .padding(horizontal = metrics.screenPadding),
             contentAlignment = Alignment.Center
         ) {
@@ -101,7 +108,9 @@ fun TrainTicketScreen(
     }
 
     LazyColumn(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier
+            .fillMaxSize()
+            .statusBarsPadding(),
         contentPadding = PaddingValues(
             start = metrics.screenPadding,
             end = metrics.screenPadding,
@@ -142,16 +151,21 @@ fun TrainTicketScreen(
         }
 
         item("ticket") {
+            val departureCode = if (train.boardsElsewhere) train.boardingCode.ifBlank { "NAGPUR" } else train.originCode.ifBlank { "—" }
+            val departureName = if (train.boardsElsewhere) train.boardingName.ifBlank { "Nagpur" } else train.originName.ifBlank { train.originCode }
+            val departureTime = DateTimeUtils.formatTime(train.departureTime)
+            val arrivalTime = DateTimeUtils.formatTime(train.arrivalTime)
+
             TicketCard(
                 trainNumber = train.number,
                 trainName = train.name.ifBlank { "Train ${train.number}" },
-                originCode = train.originCode.ifBlank { "—" },
-                originName = train.originName.ifBlank { train.originCode },
-                originTime = DateTimeUtils.formatTime(train.departureTime),
+                originCode = departureCode,
+                originName = departureName,
+                originTime = departureTime,
                 destinationCode = train.destinationCode.ifBlank { "—" },
                 destinationName = train.destinationName.ifBlank { train.destinationCode },
-                destinationTime = DateTimeUtils.formatTime(train.arrivalTime),
-                dateLabel = DateTimeUtils.formatFullDate(train.departureTime.toLocalDate()),
+                destinationTime = arrivalTime,
+                dateLabel = DateTimeUtils.formatShortDateWithYear(train.departureTime.toLocalDate()),
                 pnr = train.pnr.takeIf { it.isNotBlank() },
                 travelClass = train.travelClass.takeIf { it.isNotBlank() },
                 platform = train.platform.takeIf { it.isNotBlank() },
@@ -161,8 +175,7 @@ fun TrainTicketScreen(
             )
         }
 
-        // The booking's own passengers are the truth here. The profile name only stands in when
-        // the booking has none — a train typed in by hand before the ticket was bought.
+        // Warning for when the passenger boards elsewhere down the line.
         if (train.boardsElsewhere) {
             item("boards-elsewhere") {
                 AppCard(
@@ -174,23 +187,34 @@ fun TrainTicketScreen(
                             Icons.Default.Warning,
                             contentDescription = null,
                             tint = AppThemeExtended.colors.warning,
-                            modifier = Modifier.size(20.dp)
+                            modifier = Modifier
+                                .padding(top = 2.dp)
+                                .size(20.dp)
                         )
-                        Spacer(Modifier.width(10.dp))
+                        Spacer(Modifier.width(12.dp))
                         Column {
                             Text(
-                                text = "Board at ${train.boardingName}",
-                                style = MaterialTheme.typography.titleSmall,
+                                text = "BOARD AT ${train.boardingName.uppercase()}",
+                                style = MaterialTheme.typography.titleSmall.copy(
+                                    fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+                                ),
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Spacer(Modifier.height(4.dp))
                             Text(
-                                text = "The ticket is booked from " +
+                                text = "Your ticket is booked from " +
                                     "${train.originName.ifBlank { train.originCode }}, but your " +
-                                    "reservation starts further down the line. The departure time " +
-                                    "on this ticket is the one for ${train.boardingName}.",
+                                    "boarding station is ${train.boardingName}.",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            Text(
+                                text = "Departure from ${train.boardingName}: ${DateTimeUtils.formatTime(train.departureTime)}",
+                                style = MaterialTheme.typography.bodyMedium.copy(
+                                    fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold
+                                ),
+                                color = MaterialTheme.colorScheme.onSurface
                             )
                         }
                     }

@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.tripcompanion.app.core.time.TimeProvider
 import com.tripcompanion.app.data.prefs.UserPreferencesStore
+import com.tripcompanion.app.domain.engine.TrainArrivalAutomator
 import com.tripcompanion.app.domain.engine.TripStateEngine
 import com.tripcompanion.app.domain.model.Event
 import com.tripcompanion.app.domain.model.EventStatus
@@ -74,10 +75,12 @@ data class TimelineUiState(
     val selectedDay: LocalDate? = null,
     /** Events on the selected day, statuses already computed by the engine (§21). */
     val dayEvents: List<TimelineDayEvent> = emptyList(),
+    val allDayEvents: Map<LocalDate, List<TimelineDayEvent>> = emptyMap(),
     /** How many of the selected day's events the "hide completed" preference is hiding. */
     val hiddenCompletedCount: Int = 0,
     /** Places for the day's events, keyed by id, so a row can name where it happens. */
     val places: Map<Long, Location> = emptyMap(),
+    val allPlaces: Map<Long, Location> = emptyMap(),
     /**
      * Hotel paperwork for the day's STAY events, keyed by event id.
      *
@@ -86,6 +89,7 @@ data class TimelineUiState(
      * the event.
      */
     val stayDetails: Map<Long, StayDetails> = emptyMap(),
+    val allStayDetails: Map<Long, StayDetails> = emptyMap(),
     /**
      * Bookings for the day's JOURNEY events, keyed by event id.
      *
@@ -94,6 +98,7 @@ data class TimelineUiState(
      * the event. A JOURNEY event with no booking stays an ordinary activity card.
      */
     val trains: Map<Long, Train> = emptyMap(),
+    val allTrains: Map<Long, Train> = emptyMap(),
     val currentEventId: Long? = null,
     val totalEventCount: Int = 0,
     val completedEventCount: Int = 0,
@@ -121,6 +126,7 @@ class TimelineViewModel @Inject constructor(
     private val locationRepository: LocationRepository,
     private val stayDetailsRepository: StayDetailsRepository,
     private val trainRepository: TrainRepository,
+    private val trainArrivalAutomator: TrainArrivalAutomator,
     private val journeyEventLinker: JourneyEventLinker,
     private val userPreferences: UserPreferencesStore,
     private val timeProvider: TimeProvider
@@ -162,6 +168,14 @@ class TimelineViewModel @Inject constructor(
             val showCompletedFlow = userPreferences.preferences
                 .map { it.showCompletedActivities }
                 .distinctUntilChanged()
+
+            // Run event-driven arrival automator on active trains and clock ticks
+            launch {
+                combine(trainsFlow, clockFlow) { trains, _ -> trains }
+                    .collect { trains ->
+                        trainArrivalAutomator.checkArrivals(trains)
+                    }
+            }
 
             combine(
                 tripFlow,
@@ -212,8 +226,13 @@ class TimelineViewModel @Inject constructor(
 
     fun completeEvent(event: Event) {
         viewModelScope.launch {
+            val now = timeProvider.now()
             eventRepository.updateEvent(
-                event.copy(status = EventStatus.COMPLETED, updatedAt = timeProvider.now())
+                event.copy(
+                    status = EventStatus.COMPLETED,
+                    actualEndTime = event.actualEndTime ?: now,
+                    updatedAt = now
+                )
             )
         }
     }
@@ -228,8 +247,143 @@ class TimelineViewModel @Inject constructor(
 
     fun reopenEvent(event: Event) {
         viewModelScope.launch {
+            val now = timeProvider.now()
             eventRepository.updateEvent(
-                event.copy(status = EventStatus.UPCOMING, updatedAt = timeProvider.now())
+                event.copy(
+                    status = EventStatus.UPCOMING,
+                    actualEndTime = null,
+                    updatedAt = now
+                )
+            )
+        }
+    }
+
+    fun boardTrain(train: Train, event: Event) {
+        viewModelScope.launch {
+            val now = timeProvider.now()
+            trainRepository.updateTrain(train.copy(actualBoardingTime = now))
+            eventRepository.updateEvent(
+                event.copy(
+                    status = EventStatus.ACTIVE,
+                    actualStartTime = now,
+                    updatedAt = now
+                )
+            )
+        }
+    }
+
+    fun arriveTrain(train: Train, event: Event) {
+        viewModelScope.launch {
+            val now = timeProvider.now()
+            trainRepository.updateTrain(
+                train.copy(
+                    actualArrivalTime = now,
+                    arrivalSource = "MANUAL"
+                )
+            )
+            eventRepository.updateEvent(
+                event.copy(
+                    status = EventStatus.COMPLETED,
+                    actualEndTime = now,
+                    updatedAt = now
+                )
+            )
+        }
+    }
+
+    fun checkInStay(stay: StayDetails?, event: Event) {
+        viewModelScope.launch {
+            val now = timeProvider.now()
+            if (stay != null) {
+                stayDetailsRepository.save(stay.copy(actualCheckIn = now))
+            }
+            eventRepository.updateEvent(
+                event.copy(
+                    status = EventStatus.ACTIVE,
+                    actualStartTime = now,
+                    updatedAt = now
+                )
+            )
+        }
+    }
+
+    fun checkOutStay(stay: StayDetails?, event: Event) {
+        viewModelScope.launch {
+            val now = timeProvider.now()
+            if (stay != null) {
+                stayDetailsRepository.save(stay.copy(actualCheckOut = now))
+            }
+            eventRepository.updateEvent(
+                event.copy(
+                    status = EventStatus.COMPLETED,
+                    actualEndTime = now,
+                    updatedAt = now
+                )
+            )
+        }
+    }
+
+    fun undoBoardTrain(train: Train, event: Event) {
+        viewModelScope.launch {
+            val now = timeProvider.now()
+            trainRepository.updateTrain(train.copy(actualBoardingTime = null))
+            eventRepository.updateEvent(
+                event.copy(
+                    status = EventStatus.UPCOMING,
+                    actualStartTime = null,
+                    updatedAt = now
+                )
+            )
+        }
+    }
+
+    fun undoArriveTrain(train: Train, event: Event) {
+        viewModelScope.launch {
+            val now = timeProvider.now()
+            trainRepository.updateTrain(
+                train.copy(
+                    actualArrivalTime = null,
+                    arrivalSource = null
+                )
+            )
+            eventRepository.updateEvent(
+                event.copy(
+                    status = if (train.actualBoardingTime != null) EventStatus.ACTIVE else EventStatus.UPCOMING,
+                    actualEndTime = null,
+                    updatedAt = now
+                )
+            )
+        }
+    }
+
+    fun undoCheckInStay(stay: StayDetails?, event: Event) {
+        viewModelScope.launch {
+            val now = timeProvider.now()
+            if (stay != null) {
+                stayDetailsRepository.save(stay.copy(actualCheckIn = null))
+            }
+            eventRepository.updateEvent(
+                event.copy(
+                    status = EventStatus.UPCOMING,
+                    actualStartTime = null,
+                    updatedAt = now
+                )
+            )
+        }
+    }
+
+    fun undoCheckOutStay(stay: StayDetails?, event: Event) {
+        viewModelScope.launch {
+            val now = timeProvider.now()
+            if (stay != null) {
+                stayDetailsRepository.save(stay.copy(actualCheckOut = null))
+            }
+            eventRepository.updateEvent(
+                event.copy(
+                    status = if (stay?.actualCheckIn != null) EventStatus.ACTIVE else EventStatus.UPCOMING,
+                    actualEndTime = null,
+                    updatedAt = now
+                )
             )
         }
     }
@@ -274,21 +428,23 @@ class TimelineViewModel @Inject constructor(
         val trainsByEvent = allTrains.mapNotNull { train -> train.eventId?.let { it to train } }
             .toMap()
 
+        val allDayEvents = byDay.mapValues { (_, dayList) ->
+            if (showCompleted) dayList else dayList.filter { it.event.status != EventStatus.COMPLETED }
+        }
+
         return TimelineUiState(
             trip = trip,
             days = days,
             selectedDay = selected,
             dayEvents = visible,
+            allDayEvents = allDayEvents,
             hiddenCompletedCount = onDay.size - visible.size,
-            places = visible.mapNotNull { item ->
-                item.event.locationId?.let { id -> placesById[id]?.let { id to it } }
-            }.toMap(),
-            stayDetails = visible.mapNotNull { item ->
-                stayDetailsByEvent[item.event.id]?.let { item.event.id to it }
-            }.toMap(),
-            trains = visible.mapNotNull { item ->
-                trainsByEvent[item.event.id]?.let { item.event.id to it }
-            }.toMap(),
+            places = placesById,
+            allPlaces = placesById,
+            stayDetails = stayDetailsByEvent,
+            allStayDetails = stayDetailsByEvent,
+            trains = trainsByEvent,
+            allTrains = trainsByEvent,
             currentEventId = computed.currentEvent?.id,
             totalEventCount = computed.totalEventCount,
             completedEventCount = computed.completedEventCount,
@@ -301,6 +457,7 @@ class TimelineViewModel @Inject constructor(
     /**
      * Splits events across trip days:
      * - Same-day activities appear on their single date.
+     * - Same-day STAY activities generate two cards (Check-in and Check-out).
      * - Multi-day STAY activities appear as check-in on the arrival day and check-out on the departure day.
      * - Multi-day JOURNEY (overnight train) activities appear on the departure day and arrival day.
      */
@@ -311,12 +468,31 @@ class TimelineViewModel @Inject constructor(
             val endDate = event.endTime.toLocalDate()
 
             if (startDate == endDate) {
-                result.getOrPut(startDate) { mutableListOf() }.add(
-                    TimelineDayEvent(
-                        event = event,
-                        displayTime = event.startTime.toLocalTime()
+                if (event.type == EventType.STAY) {
+                    // Check-in card
+                    result.getOrPut(startDate) { mutableListOf() }.add(
+                        TimelineDayEvent(
+                            event = event,
+                            displayTime = event.startTime.toLocalTime(),
+                            isCheckIn = true
+                        )
                     )
-                )
+                    // Check-out card
+                    result.getOrPut(startDate) { mutableListOf() }.add(
+                        TimelineDayEvent(
+                            event = event,
+                            displayTime = event.endTime.toLocalTime(),
+                            isCheckOut = true
+                        )
+                    )
+                } else {
+                    result.getOrPut(startDate) { mutableListOf() }.add(
+                        TimelineDayEvent(
+                            event = event,
+                            displayTime = event.startTime.toLocalTime()
+                        )
+                    )
+                }
             } else {
                 if (event.type == EventType.STAY) {
                     // Check-in on arrival day
@@ -372,6 +548,7 @@ class TimelineViewModel @Inject constructor(
         return result.mapValues { (_, list) ->
             list.sortedWith(
                 compareBy<TimelineDayEvent> { it.displayTime }
+                    .thenBy { if (it.isCheckIn) 0 else if (it.isCheckOut) 1 else 0 }
                     .thenBy { it.event.order }
                     .thenBy { it.event.id }
             )

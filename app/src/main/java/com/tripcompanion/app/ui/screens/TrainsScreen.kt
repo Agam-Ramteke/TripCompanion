@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -35,6 +36,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -48,6 +50,7 @@ import com.tripcompanion.app.feature.train.TrainsViewModel
 import com.tripcompanion.app.ui.components.AppIconButton
 import com.tripcompanion.app.ui.components.bookingSummary
 import com.tripcompanion.app.ui.components.EmptyState
+import com.tripcompanion.app.ui.components.rememberScrollAwareNestedScrollConnection
 import com.tripcompanion.app.ui.components.SecondaryButton
 import com.tripcompanion.app.ui.components.SegmentedControl
 import com.tripcompanion.app.ui.components.TrainCard
@@ -87,14 +90,27 @@ fun TrainsScreen(
     }
 
     if (state.isLoading) {
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Box(
+            Modifier
+                .fillMaxSize()
+                .statusBarsPadding(),
+            contentAlignment = Alignment.Center
+        ) {
             CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
         }
         return
     }
 
+    val nestedScrollConnection = rememberScrollAwareNestedScrollConnection(
+        hideThresholdDp = 32.dp,
+        showThresholdDp = 20.dp
+    )
+
     LazyColumn(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier
+            .fillMaxSize()
+            .statusBarsPadding()
+            .nestedScroll(nestedScrollConnection),
         contentPadding = PaddingValues(
             start = metrics.screenPadding,
             end = metrics.screenPadding,

@@ -134,7 +134,7 @@ fun TripEditorScreen(
     }
 
     Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
+        containerColor = Color.Transparent,
         topBar = {
             TopAppBar(
                 title = { Text(if (state.isEditing) "Edit trip" else "New trip") },
@@ -144,9 +144,8 @@ fun TripEditorScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background
-                ),
-                windowInsets = WindowInsets(0.dp)
+                    containerColor = Color.Transparent
+                )
             )
         }
     ) { padding ->

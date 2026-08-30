@@ -20,7 +20,7 @@ import javax.inject.Inject
 
 // ── Material 3 colour schemes ──
 //
-// `primary` is the fill blue and `tertiary` is the on-background accent blue; the two are
+// `primary` is the fill teal and `tertiary` is the on-background accent teal; the two are
 // deliberately different tones. See Color.kt for why.
 
 private val TravelLightColorScheme = lightColorScheme(

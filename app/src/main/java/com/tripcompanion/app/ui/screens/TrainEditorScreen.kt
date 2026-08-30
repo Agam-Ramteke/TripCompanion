@@ -146,7 +146,7 @@ fun TrainEditorScreen(
     fun pickTicket() = ticketPicker.launch(arrayOf("application/pdf"))
 
     Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
+        containerColor = Color.Transparent,
         topBar = {
             TopAppBar(
                 title = { Text(if (state.isEditing) "Edit train" else "Add a train") },
@@ -156,7 +156,7 @@ fun TrainEditorScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background
+                    containerColor = Color.Transparent
                 )
             )
         }

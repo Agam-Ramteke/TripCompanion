@@ -138,6 +138,17 @@ class PlacesViewModel @Inject constructor(
     }
 
     /**
+     * Delete multiple places at once from the selection mode.
+     */
+    fun deleteMultiple(placeIds: Set<Long>) {
+        viewModelScope.launch {
+            placeIds.forEach { id ->
+                locationRepository.deleteLocation(id)
+            }
+        }
+    }
+
+    /**
      * Name, category or address.
      *
      * Searching the address matters more than it looks: "Old City" is how someone remembers

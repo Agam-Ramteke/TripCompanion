@@ -1,0 +1,129 @@
+{
+  "version": 8,
+  "name": "Travel Midnight Dark",
+  "sources": {
+    "protomaps": {
+      "type": "vector",
+      "tiles": [
+        "https://api.protomaps.com/tiles/v4/{z}/{x}/{y}.mvt?key=ee78418e65d571cd"
+      ],
+      "maxzoom": 15,
+      "attribution": "© OpenStreetMap contributors © Protomaps"
+    }
+  },
+  "glyphs": "https://protomaps.github.io/basemaps-assets/fonts/{fontstack}/{range}.pbf",
+  "layers": [
+    {
+      "id": "background",
+      "type": "background",
+      "paint": {
+        "background-color": "#0B191E"
+      }
+    },
+    {
+      "id": "earth",
+      "type": "fill",
+      "source": "protomaps",
+      "source-layer": "earth",
+      "paint": {
+        "fill-color": "#0B191E"
+      }
+    },
+    {
+      "id": "landcover_wood",
+      "type": "fill",
+      "source": "protomaps",
+      "source-layer": "natural",
+      "paint": {
+        "fill-color": "#122A24",
+        "fill-opacity": 0.9
+      }
+    },
+    {
+      "id": "landuse_park",
+      "type": "fill",
+      "source": "protomaps",
+      "source-layer": "landuse",
+      "paint": {
+        "fill-color": "#16332A",
+        "fill-opacity": 0.9
+      }
+    },
+    {
+      "id": "water",
+      "type": "fill",
+      "source": "protomaps",
+      "source-layer": "water",
+      "paint": {
+        "fill-color": "#081822"
+      }
+    },
+    {
+      "id": "waterway",
+      "type": "line",
+      "source": "protomaps",
+      "source-layer": "water",
+      "paint": {
+        "line-color": "#0D2230",
+        "line-width": 2
+      }
+    },
+    {
+      "id": "buildings",
+      "type": "fill",
+      "source": "protomaps",
+      "source-layer": "buildings",
+      "paint": {
+        "fill-color": "#112228",
+        "fill-outline-color": "#192F38"
+      }
+    },
+    {
+      "id": "roads_casing",
+      "type": "line",
+      "source": "protomaps",
+      "source-layer": "roads",
+      "paint": {
+        "line-color": "#10232B",
+        "line-width": [
+          "interpolate", ["linear"], ["zoom"],
+          10, 1.5,
+          14, 4,
+          18, 12
+        ]
+      }
+    },
+    {
+      "id": "roads_core",
+      "type": "line",
+      "source": "protomaps",
+      "source-layer": "roads",
+      "paint": {
+        "line-color": "#1B3039",
+        "line-width": [
+          "interpolate", ["linear"], ["zoom"],
+          10, 1,
+          14, 2.5,
+          18, 9
+        ]
+      }
+    },
+    {
+      "id": "places_labels",
+      "type": "symbol",
+      "source": "protomaps",
+      "source-layer": "places",
+      "layout": {
+        "text-field": "{name}",
+        "text-size": 12,
+        "text-font": ["Noto Sans Regular"],
+        "text-max-width": 8
+      },
+      "paint": {
+        "text-color": "#8EA6A0",
+        "text-halo-color": "#0B191E",
+        "text-halo-width": 1.5
+      }
+    }
+  ]
+}

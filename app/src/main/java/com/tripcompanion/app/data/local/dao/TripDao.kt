@@ -24,6 +24,9 @@ interface TripDao {
     @Delete
     suspend fun deleteTrip(trip: TripEntity)
 
+    @Query("SELECT * FROM trips WHERE LOWER(TRIM(name)) = LOWER(TRIM(:name)) AND startDate = :startDate LIMIT 1")
+    suspend fun findTripByNameAndStartDate(name: String, startDate: java.time.LocalDate): TripEntity?
+
     @Query("DELETE FROM trips WHERE id = :id")
     suspend fun deleteTripById(id: Long)
 }

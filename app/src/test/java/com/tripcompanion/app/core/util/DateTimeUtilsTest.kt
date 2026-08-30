@@ -348,4 +348,34 @@ class DateTimeUtilsTest {
             assertEquals(date, DateTimeUtils.epochMillisToLocalDate(millis))
         }
     }
+
+    // ---- Live Countdown ----------------------------------------------------
+
+    @Test
+    fun `formatLiveCountdown matches precision tiers`() {
+        val target = LocalDateTime.of(2026, 9, 5, 15, 25, 0)
+
+        // > 48 hours: "11 days to go"
+        val elevenDaysBefore = target.minusDays(11)
+        assertEquals("11 days to go", DateTimeUtils.formatLiveCountdown(target, elevenDaysBefore))
+
+        val twoDaysBefore = target.minusHours(48)
+        assertEquals("2 days to go", DateTimeUtils.formatLiveCountdown(target, twoDaysBefore))
+
+        // 24–48 hours: "1d 7h 23m"
+        val dayAndHalf = target.minusHours(31).minusMinutes(23)
+        assertEquals("1d 7h 23m", DateTimeUtils.formatLiveCountdown(target, dayAndHalf))
+
+        // < 24 hours: "18h 42m"
+        val eighteenHours = target.minusHours(18).minusMinutes(42)
+        assertEquals("18h 42m", DateTimeUtils.formatLiveCountdown(target, eighteenHours))
+
+        // < 1 hour: "42m 18s"
+        val fortyTwoMins = target.minusMinutes(42).minusSeconds(18)
+        assertEquals("42m 18s", DateTimeUtils.formatLiveCountdown(target, fortyTwoMins))
+
+        // At/after zero: "Trip starts now"
+        assertEquals("Trip starts now", DateTimeUtils.formatLiveCountdown(target, target))
+        assertEquals("Trip starts now", DateTimeUtils.formatLiveCountdown(target, target.plusSeconds(30)))
+    }
 }

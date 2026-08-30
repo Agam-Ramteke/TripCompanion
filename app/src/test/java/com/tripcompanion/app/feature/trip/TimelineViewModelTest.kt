@@ -10,11 +10,17 @@ import com.tripcompanion.app.data.repository.LocationRepositoryImpl
 import com.tripcompanion.app.data.repository.StayDetailsRepositoryImpl
 import com.tripcompanion.app.data.repository.TrainRepositoryImpl
 import com.tripcompanion.app.data.repository.TripRepositoryImpl
+import com.tripcompanion.app.domain.engine.TrainArrivalAutomator
 import com.tripcompanion.app.domain.model.Event
 import com.tripcompanion.app.domain.model.EventType
 import com.tripcompanion.app.domain.model.Train
+import com.tripcompanion.app.domain.model.TrainStop
 import com.tripcompanion.app.domain.model.Trip
 import com.tripcompanion.app.domain.service.JourneyEventLinker
+import com.tripcompanion.app.domain.service.TrainScheduleOutcome
+import com.tripcompanion.app.domain.service.TrainStatusError
+import com.tripcompanion.app.domain.service.TrainStatusOutcome
+import com.tripcompanion.app.domain.service.TrainStatusService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -44,10 +50,20 @@ class TimelineViewModelTest {
     private lateinit var locations: LocationRepositoryImpl
     private lateinit var stayDetails: StayDetailsRepositoryImpl
     private lateinit var trains: TrainRepositoryImpl
+    private lateinit var automator: TrainArrivalAutomator
     private lateinit var linker: JourneyEventLinker
     private lateinit var prefs: FakeUserPreferencesStore
 
     private var tripId = 0L
+
+    private val fakeTrainStatusService = object : TrainStatusService {
+        override val isLive: Boolean = false
+        override val providerName: String = "Fake"
+        override suspend fun refresh(trainId: Long, force: Boolean): TrainStatusOutcome =
+            TrainStatusOutcome.Failed(TrainStatusError.NETWORK_UNAVAILABLE)
+        override suspend fun refreshSchedule(trainId: Long): TrainScheduleOutcome =
+            TrainScheduleOutcome.Unsupported
+    }
 
     class FakeUserPreferencesStore(
         initial: UserPreferences = UserPreferences()
@@ -71,6 +87,7 @@ class TimelineViewModelTest {
         trains = TrainRepositoryImpl(
             db.trainDao, db.trainPassengerDao, db.trainStopDao, db.trainRunStatusDao
         )
+        automator = TrainArrivalAutomator(fakeTrainStatusService, trains, clock)
         linker = JourneyEventLinker(events, trains, locations, null)
         prefs = FakeUserPreferencesStore()
     }
@@ -105,7 +122,7 @@ class TimelineViewModelTest {
 
         val handle = SavedStateHandle(mapOf("tripId" to tripId.toString()))
         val vm = TimelineViewModel(
-            handle, trips, events, locations, stayDetails, trains, linker, prefs, clock
+            handle, trips, events, locations, stayDetails, trains, automator, linker, prefs, clock
         )
         advanceUntilIdle()
 
@@ -141,7 +158,7 @@ class TimelineViewModelTest {
 
         val handle = SavedStateHandle(mapOf("tripId" to tripId.toString()))
         val vm = TimelineViewModel(
-            handle, trips, events, locations, stayDetails, trains, linker, prefs, clock
+            handle, trips, events, locations, stayDetails, trains, automator, linker, prefs, clock
         )
         advanceUntilIdle()
 
@@ -210,7 +227,7 @@ class TimelineViewModelTest {
 
         val handle = SavedStateHandle(mapOf("tripId" to tripId.toString()))
         val vm = TimelineViewModel(
-            handle, trips, events, locations, stayDetails, trains, linker, prefs, clock
+            handle, trips, events, locations, stayDetails, trains, automator, linker, prefs, clock
         )
         advanceUntilIdle()
 
