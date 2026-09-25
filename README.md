@@ -1,13 +1,13 @@
-# 🚆 Trip Companion
+# Trip Companion
 
 > **A focused, offline-first travel companion & trip HUD for Android.**  
 > Track trains live, manage detailed multi-day itineraries, explore interactive maps with road-following routing, and preserve all your travel memories — entirely private and stored on-device.
 
 ---
 
-## ✨ Features
+## Features
 
-### 📍 Smart Itinerary & Day Paging
+### Smart Itinerary & Day Paging
 - **Chronological Multi-Day Timeline**: Horizontal date paging with independent vertical scroll positions and swipe gestures.
 - **Dynamic Context (Next Up HUD)**: Automatically surfaces the active or next upcoming activity, train, or stay based on real-time clock and trip state.
 - **Smart Stay Lifecycle**: Checking into a hotel yields Next Up focus to daytime sightseeing and dining activities until check-out time arrives.
