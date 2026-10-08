@@ -14,19 +14,19 @@
 - **Media & Photo Attachments**: Attach reference photos and travel memories stored securely inside the app-private sandbox.
 - **Export & Import**: Full archive backup (JSON + media in ZIP) for seamless offline migration between devices.
 
-### 🚂 Indian Railways Live Tracking & Automation
+### Indian Railways Live Tracking & Automation
 - **Real-Time Running Status**: Powered by **RailRadar API** with offline fallback to scheduled timetables.
 - **Journey-Segmented Route**: Station-by-station progress trimmed specifically between your boarding and destination stations.
 - **PNR & e-Ticket Parser**: Extract passenger allotments, berths, quotas, and coach sequences automatically from PDF e-tickets.
 - **Arrival Automation & Overrides**: Automatically detects and prompts for train arrival with manual station notes and overrides.
 
-### 🗺️ Interactive Maps & Place Search
+### Interactive Maps & Place Search
 - **LocationIQ Geocoding**: Accurate street-style forward geocoding and autocomplete for Indian railway stations, hotels, cafes, and attractions with automatic coordinate healing.
 - **Geoapify Road Routing & Vector Tiles**: Crisp turn-by-turn road-following polyline geometry and high-performance vector basemaps.
 - **Editorial Map HUD**: High-contrast frosted pin badges, rotating refresh indicator, day filter switcher, and thumb-friendly floating action buttons.
 - **Offline Geometry**: Seamlessly falls back to direct geodesic bearings when network connectivity is unavailable.
 
-### 🎨 Design System & Aesthetics
+### Design System & Aesthetics
 - **Two-Font Pairing**:
   - **Poppins** (Bold / SemiBold / Medium): Expressive typography for screen titles, trip headers, and prominent stat figures.
   - **Plus Jakarta Sans** (SemiBold / Medium / Regular): Crisp, modern neo-grotesque for body reading, buttons, tabs, and metadata.
@@ -35,7 +35,7 @@
 
 ---
 
-## 🛠️ Architecture & Tech Stack
+## Architecture & Tech Stack
 
 The application adheres to **Clean Architecture** and **Hexagonal (Ports & Adapters)** principles:
 
@@ -66,7 +66,7 @@ The application adheres to **Clean Architecture** and **Hexagonal (Ports & Adapt
 
 ---
 
-## 🚀 Getting Started
+## Getting Started
 
 ### 1. Prerequisites
 - **Android Studio Ladybug (or newer)** / Android SDK 35
@@ -106,7 +106,7 @@ OPENROUTESERVICE_API_KEY=your_openrouteservice_api_key_here
 
 ---
 
-## 🔒 Privacy & Offline Philosophy
+## Privacy & Offline Philosophy
 
 - **Zero Tracker SDKs**: No analytics, no advertising networks, and no external tracking pixels.
 - **On-Device Storage**: All trips, tickets, notes, and photos stay in sandboxed local app storage.
